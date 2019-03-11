@@ -10,16 +10,17 @@ for the categorical model
 from functools import reduce
 from itertools import chain
 from typing import (
-    Any, Callable, Iterable, NamedTuple, Sequence, Tuple, Hashable, Mapping)
+    Any, Callable, Iterable, Union, Mapping,
+    NamedTuple, Sequence, Tuple, Hashable, Mapping, TypeVar)
 
 import torch
 
 from catlearn.tensor_utils import (
     DEFAULT_EPSILON,
-    repeat_tensor,
     zeros_like,
     subproba_kl_div,
     remap_subproba)
+from catlearn.graph_utils import CompositeArrow, CompositionGraph
 from catlearn.algebra_models import Algebra
 
 
@@ -52,6 +53,138 @@ class ScoringModel(AbstractModel):
                  rel: torch.Tensor) -> torch.Tensor:
         raise NotImplementedError()
 # pylint: enable=missing-docstring
+
+
+NodeType = TypeVar("NodeType")
+ArrowType = TypeVar("ArrowType")
+AlgebraType = TypeVar("AlgebraType")
+DataType = TypeVar("DataType")
+
+
+class RelationCache(
+        Generic[DataType],
+        CompositionGraph[NodeType, ArrowType, AlgebraType]):
+    """
+    A cache to keep the values of all relations
+    """
+    def __init__(
+            self,
+            generators: Mapping[
+                ArrowType,
+                Callable[[DataType, Datatype], AlgebraType]],
+            scorer: Callable[[DataType, DataType, AlgebraType], torch.Tensor],
+            comp: Callable[[AlgebraType, AlgebraType], AlgebraType],
+            datas: Mapping[NodeType, torch.Tensor]) -> None:
+        """
+        Initialize a new cache of relations, from:
+           generators:  mapping whose:
+               - keys are possible arrow names
+               - values are functions taking a pair of source, target data
+                   points as input and returning a relation value
+           scorer:  a score function returning a score vector from 2 points
+               and 1 relation value,
+           comp: a composition operation returning a relation value from
+               2 relation values (supposed associative)
+        """
+
+        # base assumption: all arrows node supports should be in
+
+        # save a tensor containing the causality cost and the number
+        # of compositions being taken into account in it
+        self._causality_cost = torch.zeros(())
+        self._nb_compositions = 0
+
+        # keep in memory the datas dictionary
+        self._datas = datas
+
+        def rel_gen(
+                self, src: NodeType, tar: NodeType, arr: ArrowType
+                ) -> AlgebraType:
+            """
+            Generate a new first order relation from 2 data points
+            """
+            # compute relation, then its score and return both as
+            # (score, rel) tuple
+            rel_value = generator[arr](
+                self._datas[fst_node], self._datas[scd_node])
+            rel_score = scorer(
+                self._datas[fst_node], self._datas[scd_node], rel_value)
+            return rel_score, rel_value
+
+        def rel_comp(
+                self, arrow: CompositeArrow[NodeType, ArrowType]
+                ) -> AlgebraType:
+            """
+            compute the composite of all order 1 arrows, and account for
+            causality cost
+            """
+            # compute the value of the arrow
+            comp_value = comp(self[arrow[:1]], self[arrow[1:]])
+            comp_scores = scorer(self[arrow[0]], self[arrow[-1]], comp_value)
+            comp_validity = comp_scores.sum()
+
+            # recursively access all the scores of the subarrow splits
+            # and check the composition score
+            comp_final_score = comp_scores.clone()
+            for idx in range(1, len(arrow)):
+
+                # compute update to causality score
+                fst_scores = self[arrow[:idx]][0]
+                scd_scores = self[arrow[idx:]][0]
+                causal_score = torch.relu(
+                    torch.log(
+                        comp_scores.sum()/(fst_scores * scd_scores).sum()))
+                self._causality_cost += causal_score
+
+                # if causality update > 0., relation is not valid: 0. scores
+                if causal_score > 0.:
+                    comp_final_scores[:] = 0.
+
+            return comp_final_scores, comp_value
+
+        super().__init__(rel_gen, rel_comp)
+
+    def __getitem__(
+            self, arrow: CompositeArrow[ArrowType, NodeType]
+            ) -> Union[DataType, Tuple[torch.Tensor, AlgebraType]]:
+        """
+        Returns the value associated to an arrow.
+        If the arrow has length 0 (contains only a node):
+            returns the data associated to the point
+        If the arrow has length >= 1:
+            returns the tuple (score, relation value)
+        """
+        if len(arrow) == 0:
+            return self._datas[arrow[0]]
+        else:
+            return super().__getitem__(arrow)
+
+    def __setitem__(self, node: NodeType, data_point: DataType) -> None:
+        """
+        set value of a new data point.
+        Note: cannot set the value of an arrow, as these are computed using
+        relation generation and compositions.
+        """
+        self._data[node] = data_point
+
+    def add(self, arrow: Composite[NodeType, ArrowType]) -> None:
+        """
+        add composite arrow to the cache, starting by checking that data
+        for all the points is available.
+        """
+        if not set(arrow.nodes) <= set(self._dict):
+            raise ValueError(
+                "Cannot add a composite whose support is not included"
+                "in the base dataset")
+
+        super().add(arrow)
+
+    def flush(self) -> None:
+        """
+        Flush all relations and datas content
+        """
+        super().flush()
+        self._datas = {}
 
 
 class DecisionCatModelCosts(NamedTuple):
@@ -103,29 +236,50 @@ class DecisionCatModel:
             self,
             relation_models: Mapping[Hashable, RelationModel],
             scoring_model: ScoringModel,
-            weight_priors: torch.Tensor,
             algebra_model: Algebra,
-            scores: Sequence[bool],
             epsilon: float = DEFAULT_EPSILON) -> None:
         """
         Create a new instance of Decision categorical model
         """
         assert epsilon > 0., "epsilon should be strictly positive"
-        assert weight_priors.ndimension() == 1, (
-            "weight_priors should be a 1-dimensional array")
-        assert (weight_priors >= 0).all(), (
-            "weight_priors should be positive values only")
-        total_weight = torch.sum(weight_priors)
-        assert total_weight > 0, "Weight_priors should have non zero values"
 
-        self._relation_models = tuple(relation_models)
+        self._relation_models = relation_models
         self._scoring_model = scoring_model
-        self.weight_priors = weight_priors / total_weight
         self.algebra_model = algebra_model
-        self.score_dim = len(scores)
-        self.equivalence_indices = [i for i, eq in enumerate(scores) if eq]
-        self.nb_equivalences = len(self.equivalence_indices)
         self.epsilon = epsilon
+
+        # tensors to store the causality and matching total scores
+        self._total_causal_cost = torch.Tensor(0.)
+        self._total_matching_cost = torch.Tensor(0.)
+
+        # for storing relation cache
+        self._relation_cache = {}
+
+        # to store the number of inputs taken into account for both scores
+        self._nb_causal = 0
+        self._nb_matching = 0
+
+    def reset_causal(self) -> None:
+        """
+        reset causality score counting
+        """
+        self._total_causal_cost = 0.
+        self._nb_causal = 0
+
+    def reset_matching(self) -> None:
+        """
+        reset matching score counting
+        """
+        self._total_matching_cost = 0.
+        self._nb_matching = 0
+
+    def total_cost(self) -> None:
+        """
+        get total cost currently recorded
+        """
+        return (
+            self._total_causal_cost/self._nb_causal
+            + self._total_matching_cost/self._nb_matching)
 
     def score(
             self, src: torch.Tensor, tar: torch.Tensor,
@@ -176,9 +330,11 @@ class DecisionCatModel:
             for idx in range(len(relations)))
         return torch.stack(relations, dim=-2)
 
-    def get_composites(
-            self, data_points: torch.Tensor,
-            relations: Sequence[Hashable]) -> Tuple[torch.Tensor]:
+    def add_relations(
+            self,
+            datas: Mapping[Hashable, torch.Tensor],
+            relations: Sequence[CompositeArrow[Hashable, Hashable]]
+            ) -> Tuple[torch.Tensor]:
         """
         Get 2 lists:
             - the first consists of successive composites starting from
@@ -186,25 +342,15 @@ class DecisionCatModel:
             - the second consists of successive composites starting from
             last point (reversed)
         """
+        # add datas to cache
+        self._relation_cache.update(datas)
+
         # get relations
-        relations = self.generate_relations(data_points, relations)
-
-        # get subsequent composites, direct and opposite direction
-        direct_composites = zeros_like(relations, relations.shape)
-        opposite_composites = zeros_like(relations, relations.shape)
-
-        direct_composites[..., 0, :] = relations[..., 0, :]
-        opposite_composites[..., -1, :] = relations[..., -1, :]
-
-        for idx in range(1, len(relations)):
-            direct_composites[idx] = self.algebra_model.comp(
-                direct_composites[..., idx-1, :], relations[..., idx, :])
-            opposite_composites[-idx - 1] = self.algebra_model.comp(
-                relations[..., -idx - 1, :], opposite_composites[..., -idx, :])
+        relations = for self.
 
         return direct_composites, opposite_composites
 
-    def compute_causality(
+    def causal_cost(
             self, data_points: torch.Tensor,
             relations: Sequence[Hashable]) -> torch.Tensor:
         """
@@ -219,9 +365,14 @@ class DecisionCatModel:
         opposite_scores = opposite_composites[..., :-1, :].sum(dim=-1)
         composite_scores = direct_composites[..., -1, :].sum(dim=-1)
 
-        return torch.relu(
+        causal = torch.relu(
             torch.log(composite_scores[..., None]/(
-                direct_scores * opposite_scores + self.epsilon))).sum(dim=-1)
+                direct_scores * opposite_scores + self.epsilon))).mean(dim=-1)
+
+        self._total_causal_cost += causal.sum()
+        self._nb_causal += causal.numel()
+
+        return causal
 
     def get_relation(
             self,
@@ -257,10 +408,10 @@ class DecisionCatModel:
             data_points[..., 0, :], data_points[..., 1, :], relation)
 
         # KL_div(labels || scores), including implicit negative class
-        kl_divs = subproba_kl_div(scores, labels, epsilon=self.epsilon)
+        matching = subproba_kl_div(scores, labels, epsilon=self.epsilon)
 
-        # return the corresponding matching score
-        return kl_divs
+        self._total_matching_cost += matching.sum()
+        self._nb_matching += matching.numel()
 
 
 class TrainableDecisionCatModel(DecisionCatModel):
@@ -291,11 +442,9 @@ class TrainableDecisionCatModel(DecisionCatModel):
 
     def __init__(
             self,
-            relation_models: Sequence[RelationModel],
+            relation_models: Mapping[Hashable, RelationModel],
             scoring_model: ScoringModel,
-            weight_priors: torch.Tensor,
             algebra_model: Algebra,
-            scores: Sequence[bool],
             optimizer: Callable,
             epsilon: float = DEFAULT_EPSILON,
             **kwargs) -> None:
@@ -304,9 +453,7 @@ class TrainableDecisionCatModel(DecisionCatModel):
         """
         DecisionCatModel.__init__(
             self, relation_models, scoring_model,
-            weight_priors=weight_priors,
             algebra_model=algebra_model,
-            scores=scores,
             epsilon=epsilon)
 
         # register optimizer with remaining arguments to the constructor
@@ -326,7 +473,7 @@ class TrainableDecisionCatModel(DecisionCatModel):
         returns an iterator over parameters of the model
         """
         return lambda: chain(*(rel.parameters()
-                               for rel in self.relation_models),
+                               for rel in self._relation_models.values()),
                              self.scoring_model.parameters())
 
     def freeze(self) -> None:
@@ -334,7 +481,7 @@ class TrainableDecisionCatModel(DecisionCatModel):
         Freeze all adjustable weights (score and relations)
         """
         self.scoring_model.freeze()
-        for rel in self.relation_models:
+        for rel in self._relation_models.values():
             rel.freeze()
 
     def unfreeze(self) -> None:
@@ -342,7 +489,7 @@ class TrainableDecisionCatModel(DecisionCatModel):
         Inverse of freeze method
         """
         self.scoring_model.unfreeze()
-        for rel in self.relation_models:
+        for rel in self._relation_models.values():
             rel.unfreeze()
 
     def train(
@@ -351,74 +498,20 @@ class TrainableDecisionCatModel(DecisionCatModel):
             order: int,
             matching_weights: torch.Tensor = torch.ones([]),
             lambda_associativity: float = 1.,
-            lambda_unit: float = 1.
-    ) -> DecisionCatModelCosts:
+            lambda_unit: float = 1.):
         """
         perform one training step on a batch of tuples
         """
-        # reset gradient
-        self._optimizer.zero_grad()
-
-        # get all costs
-        costs = self.cost(
-            tuple_batch,
-            order,
-            lambda_associativity,
-            lambda_unit,
-            matching_weights)
-
-        total_cost = DecisionCatModel.get_total_cost(costs)
-
         # backprop on mean of total costs
-        total_cost.mean().backward()
+        total_cost = self.total_cost()
+        total_cost.backward()
 
         # step optimizer
         self._optimizer.step()
 
-        return costs
+        # reset gradient and total costs
+        self._optimizer.zero_grad()
+        self.reset_causal()
+        self.reset_matching()
 
-    def evaluate(
-            self,
-            batch_to_eval: torch.Tensor,
-            order: int) -> torch.Tensor:
-        """
-        Evaluate potential labelling of an input
-        batch of data tuples.
-
-        Params:
-        - batch_to_eval: a [...] x N_tuple x N_features tensor
-         where N_tuple is the length of a given data points tuple.
-        - order: maximum composition order to use for matching
-
-        Returns:
-        Eval: [...] x (N_scores+1) tensor where the last dimension
-        is the matching cost associated with the following
-        tentative labelling:
-        - Eval[..., 0] -> No match ie labels(j) = 0
-        - Eval[..., i] -> labels(j) = (i == j)
-        It is a cost, so lower is better, and each entry is positive.
-        """
-        assert order >= 1
-        assert batch_to_eval.ndimension() >= 2
-
-        # Enhance data input tensor
-        # Each data tuple should appear once
-        # for each potential labelling
-        # From D: [...] x N_tuple x N_features data tensor
-        # to D': [...] x (N_scores+1) x N_tuple x N_features tensor
-        broadcasted_eval_batch = repeat_tensor(
-            batch_to_eval, self.score_dim + 1, axis=-3)
-
-        # Creating a L: [...] x (N_scores+1) x N_scores label tensor
-        one_point_labels = torch.cat([
-            torch.zeros((1, self.score_dim)),
-            torch.eye(self.score_dim)])
-        labels_shape = (1, 1, self.score_dim + 1, self.score_dim)
-        tentative_labels = (torch.ones(batch_to_eval.shape[:-2] + (1, 1))
-                            * one_point_labels.reshape(labels_shape))
-
-        # Needs reshape as it may introduce a leading
-        # 1-sized dimension
-        return self.matching_cost(
-            broadcasted_eval_batch, tentative_labels, order).reshape(
-                batch_to_eval.shape[:-2] + (self.score_dim + 1,))
+        return total_cost
