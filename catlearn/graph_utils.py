@@ -741,7 +741,7 @@ class CompositionGraph(Generic[NodeType, ArrowType, AlgebraType], abc.Mapping): 
         # the case of length 1 arrows is simple: generate the value
         # and put it in the graph
         if len(arrow) == 1:
-            self.graph[arrow[0]][arrow[-1]][arrow] = self._generator(  # type: ignore
+            self.graph[arrow[0]][arrow[-1]][arrow.derive()] = self._generator(  # type: ignore
                 arrow[0], arrow[-1], arrow.arrows[0])
         else:
             # the case of higher order arrows is recursively defined:
@@ -759,7 +759,7 @@ class CompositionGraph(Generic[NodeType, ArrowType, AlgebraType], abc.Mapping): 
 
             # compute the value of the total arrow and register it
             value = self._comp(arrow)
-            self._graph[arrow[0]][arrow[-1]][arrow] = value
+            self._graph[arrow[0]][arrow[-1]][arrow.derive()] = value
 
     def flush(self) -> None:
         """
@@ -767,11 +767,19 @@ class CompositionGraph(Generic[NodeType, ArrowType, AlgebraType], abc.Mapping): 
         """
         self._graph = DirectedGraph()
 
+    def arrows(
+            self, src: NodeType,
+            tar: NodeType) -> Iterator[CompositeArrow[NodeType, ArrowType]]:
+        """
+        get an iterator over all arrows starting at src and ending at tar
+        """
+        return (arr.suspend(src, tar) for arr in self.graph[src][tar])
+
     def __iter__(self) -> Iterator[CompositeArrow]:
         """
         return an iterator over all composite arrows of the structure
         """
-        return chain(*self.graph.edges.values())
+        return chain(*(self.arrows(*edge) for edge in self.graph.edges))
 
     def __len__(self) -> int:
         """
@@ -784,7 +792,7 @@ class CompositionGraph(Generic[NodeType, ArrowType, AlgebraType], abc.Mapping): 
         """
         get value associated to given arrow
         """
-        return self.graph[arrow[0]][arrow[-1]][arrow]
+        return self.graph[arrow[0]][arrow[-1]][arrow.derive()]
 
     def __delitem__(
             self, arrow: CompositeArrow[NodeType, ArrowType]) -> None:
@@ -794,7 +802,7 @@ class CompositionGraph(Generic[NodeType, ArrowType, AlgebraType], abc.Mapping): 
         # remove composite from graph
         # if it was the only composite linking its source and target
         # remove the edge from the graph
-        del self.graph[arrow[0]][arrow[-1]][arrow]
+        del self.graph[arrow[0]][arrow[-1]][arrow.derive()]
         if not self.graph[arrow[0]][arrow[-1]]:
             self.graph.remove_edge(arrow[0], arrow[1])
 

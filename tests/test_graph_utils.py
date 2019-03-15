@@ -21,27 +21,13 @@ from catlearn.graph_utils import (
     DirectedGraph, DirectedAcyclicGraph, GraphRandomFactory,
     CompositeArrow, CompositionGraph)
 
+from tests.test_tools import pytest_generate_tests
+
 
 @pytest.fixture(params=[0, 432358, 98765, 326710, 54092])
 def seed(request: Any) -> int:
     """
     seed for random operations
-    """
-    return request.param
-
-
-@pytest.fixture(params=[1, 2, 3])
-def nb_nodes(request: Any) -> int:
-    """
-    number of nodes to retrieve from a stored dataset
-    """
-    return request.param
-
-
-@pytest.fixture(params=[(1,), (5, 10), (100,), (2, 2, 2)])
-def batch_shape(request: Any) -> int:
-    """
-    batch shape for dataset and databatch objects
     """
     return request.param
 
@@ -52,38 +38,6 @@ def pruning_factor(request: Any) -> float:
     pruning factor for random graph pruning operations
     """
     return request.param
-
-
-def pytest_generate_tests(metafunc):
-    """
-    called once for each test function. Decorates the test runs with the right
-    parametrization. The parametrization of each function is to be found in a
-    params dictionary in the same scope as the function, in a list associated
-    to the key being the name of the function.
-    """
-
-    # collect parameters list for test
-    func_name = metafunc.function.__name__
-    if hasattr(metafunc.cls, "params") and func_name in metafunc.cls.params:
-        funcarglist = metafunc.cls.params[func_name]
-    else:
-        # if no parameters are declared, do as if the params list is empty
-        funcarglist = []
-
-    # if specific arguments are declared, execute tests using those
-    if funcarglist:
-        argnames = sorted(funcarglist[0])
-        metafunc.parametrize(
-            argnames, [
-                [funcargs[name] for name in argnames]
-                for funcargs in funcarglist]
-            )
-    else:
-        # no specific parameters. Any existing fixture will still be used.
-        print(
-            f"No specific parametrization found"
-            f" for {metafunc.cls.__name__}.{func_name}")
-        metafunc.parametrize([], [])
 
 
 class TestDirectedGraph:
@@ -584,6 +538,15 @@ class TestCompositeArrow:
             dict(arrow=CompositeArrow[str, int](["a", "b", "c"], [3, 7])),
             dict(arrow=CompositeArrow[str, int](["a", "b"], [9]))
             ],
+        "test_op": [
+            dict(
+                arrow=CompositeArrow[str, int](["a", "b", "c"], [3, 7]),
+                expected_result=CompositeArrow[str, int](
+                    ["c", "b", "a"], [7, 3])),
+            dict(
+                arrow=CompositeArrow[str, int]("a"),
+                expected_result=CompositeArrow[str, int]("a"))
+            ],
         "test_binary_op": [
             dict(
                 binary_op=add,
@@ -686,6 +649,16 @@ class TestCompositeArrow:
         assert result == arrow
 
     @staticmethod
+    def test_op(
+            arrow: CompositeArrow[Hashable, Hashable],
+            expected_result: CompositeArrow[Hashable, Hashable]) -> None:
+        """
+        Test arrow reversal
+        """
+        result = arrow.op
+        assert result == expected_result
+
+    @staticmethod
     def test_binary_op(
             binary_op: Callable[[Any, Any], Any],
             first_operand: CompositeArrow[Hashable, Hashable],
@@ -701,3 +674,10 @@ class TestCompositeArrow:
         else:
             result = binary_op(first_operand, second_operand)
             assert result == expected_result
+
+
+class TestCompositionGraph:
+    """
+    Class for all tests pertaining to the class CompositionGraph
+    """
+    pass

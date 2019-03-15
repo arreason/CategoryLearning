@@ -10,6 +10,38 @@ from typing import Callable, Iterator
 import random
 
 
+def pytest_generate_tests(metafunc):
+    """
+    called once for each test function. Decorates the test runs with the right
+    parametrization. The parametrization of each function is to be found in a
+    params dictionary in the same scope as the function, in a list associated
+    to the key being the name of the function.
+    """
+
+    # collect parameters list for test
+    func_name = metafunc.function.__name__
+    if hasattr(metafunc.cls, "params") and func_name in metafunc.cls.params:
+        funcarglist = metafunc.cls.params[func_name]
+    else:
+        # if no parameters are declared, do as if the params list is empty
+        funcarglist = []
+
+    # if specific arguments are declared, execute tests using those
+    if funcarglist:
+        argnames = sorted(funcarglist[0])
+        metafunc.parametrize(
+            argnames, [
+                [funcargs[name] for name in argnames]
+                for funcargs in funcarglist]
+            )
+    else:
+        # no specific parameters. Any existing fixture will still be used.
+        print(
+            f"No specific parametrization found"
+            f" for {metafunc.cls.__name__}.{func_name}")
+        metafunc.parametrize([], [])
+
+
 def random_int_list(min_length: int,
                     max_length: int,
                     min_member: int,
