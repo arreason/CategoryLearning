@@ -3,7 +3,8 @@
 prepend_msg() {
     commit_msg=$1
     BRANCH_NAME=$(git symbolic-ref --short HEAD)
-    ISSUE=$(echo ${BRANCH_NAME} | cut -d'-' -f1,2)
+    # Must include the first 3 fields, since repo name contains a hyphen
+    ISSUE=$(echo ${BRANCH_NAME} | cut -d'-' -f1,2,3)
     sed -i.bak -e "1s/^/$ISSUE /" $commit_msg
 }
 
