@@ -1,0 +1,23 @@
+#!/bin/sh
+
+prepend_msg() {
+    commit_msg=$1
+    BRANCH_NAME=$(git symbolic-ref --short HEAD)
+    # Must include the first 3 fields, since repo name contains a hyphen
+    ISSUE=$(echo ${BRANCH_NAME} | cut -d'-' -f1,2,3)
+    sed -i.bak -e "1s/^/$ISSUE /" $commit_msg
+}
+
+# Do not prepend on commit -m or commit --amend
+if [ $# -le 2 ]; then
+    prepend_msg $1
+fi
+
+case "$2,$3" in
+  merge,)
+      /usr/bin/perl -i.bak -ne \
+         's/^/# /, s/^# #/#/ if /^Conflicts/ .. /#/; print' "$1"
+      ;;
+  *) ;;
+esac
+

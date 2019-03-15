@@ -1,0 +1,18 @@
+# Strictly required
+numpy
+scipy>=1.1.0
+pytest
+pytest-cov
+pytest-rerunfailures
+pylint
+scikit-learn
+networkx
+torch>=1.0,<2.0
+torchvision
+
+# Additional
+ipython
+jupyter
+pandas
+plotly
+pyyaml
