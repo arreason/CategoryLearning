@@ -7,7 +7,7 @@ tests for random graph generation
 
 from typing import (
     Any, Callable, Hashable, Dict, Iterable, Tuple,
-    Set, FrozenSet, Optional, List)
+    Set, FrozenSet, Optional, List, Union)
 from itertools import repeat
 from collections import Counter
 from copy import copy
@@ -18,7 +18,8 @@ import random
 import pytest
 
 from catlearn.graph_utils import (
-    DirectedGraph, DirectedAcyclicGraph, GraphRandomFactory)
+    DirectedGraph, DirectedAcyclicGraph, GraphRandomFactory,
+    CompositeArrow, CompositionGraph)
 
 
 @pytest.fixture(params=[0, 432358, 98765, 326710, 54092])
@@ -537,3 +538,166 @@ class TestGraphRandomFactory:
 
         assert all(
             repeat(next(first_factory) == next(second_factory), nb_steps))  # type: ignore
+
+
+class TestCompositeArrow:
+    """
+    Test the composite arrow class
+    """
+    params: Dict[str, List[Any]] = {
+        "test_getitem": [
+            dict(
+                arrow=CompositeArrow[str, int](["a", "b", "c"], [1, 2]),
+                index=1, expected_result="b"),
+            dict(
+                arrow=CompositeArrow[int, int](range(11), range(10)),
+                index=slice(None, None, 2),
+                expected_result=tuple(range(0, 11, 2))),
+            dict(
+                arrow=CompositeArrow[int, int](range(11), range(10)),
+                index=slice(1, 8, 3),
+                expected_result=tuple(range(1, 8, 3))),
+            dict(
+                arrow=CompositeArrow[str, int](["a", "b", "c"], [1, 2]),
+                index=slice(1, None),
+                expected_result=CompositeArrow[str, int](["b", "c"], [2])),
+            dict(
+                arrow=CompositeArrow[str, int](["a", "b", "c"], [1, 2]),
+                index=slice(1),
+                expected_result=CompositeArrow[str, int](["a", "b"], [1])),
+            dict(
+                arrow=CompositeArrow[str, int](
+                    ["a", "b", "c", "d"], [1, 2, 3]),
+                index=slice(1, 2),
+                expected_result=CompositeArrow[str, int](
+                    ["b", "c"], [2]))
+            ],
+        "test_derive": [
+            dict(
+                arrow=CompositeArrow[str, int](["a", "b", "c"], [3, 7]),
+                expected_result=CompositeArrow[int, str]([3, 7], ["b"])),
+            dict(
+                arrow=CompositeArrow[str, int](["a", "b"], [9]),
+                expected_result=CompositeArrow(9))
+            ],
+        "test_suspend": [
+            dict(arrow=CompositeArrow[str, int](["a", "b", "c"], [3, 7])),
+            dict(arrow=CompositeArrow[str, int](["a", "b"], [9]))
+            ],
+        "test_binary_op": [
+            dict(
+                binary_op=add,
+                first_operand=CompositeArrow[str, int](
+                    ["a", "b", "c"], [0, 1]),
+                second_operand=CompositeArrow[str, int](
+                    ["c", "d", "e"], [9, -1]),
+                expected_result=CompositeArrow[str, int](
+                    ["a", "b", "c", "d", "e"], [0, 1, 9, -1])),
+            dict(
+                binary_op=add,
+                first_operand=CompositeArrow[str, int](["a", "b"], [0]),
+                second_operand=CompositeArrow[str, int]("b"),
+                expected_result=CompositeArrow[str, int](["a", "b"], [0])),
+            dict(
+                binary_op=add,
+                first_operand=CompositeArrow[str, int](["a", "b"], [0]),
+                second_operand=CompositeArrow[str, int](["c", "d"], [1]),
+                expected_result=None),
+            dict(
+                binary_op=matmul,
+                first_operand=CompositeArrow[str, int](
+                    ["a", "b", "c", "d"], [0, 1, 3]),
+                second_operand=CompositeArrow[str, int](
+                    ["b", "c", "d", "e"], [1, 3, -1]),
+                expected_result=CompositeArrow[str, int](
+                    ["a", "b", "c", "d", "e"], [0, 1, 3, -1])),
+            dict(
+                binary_op=matmul,
+                first_operand=CompositeArrow[str, int](["a", "b"], [0]),
+                second_operand=CompositeArrow[str, int](["b", "c"], [9]),
+                expected_result=CompositeArrow[str, int](
+                    ["a", "b", "c"], [0, 9])),
+            dict(
+                binary_op=lambda x, y: x.comp(y, -1),
+                first_operand=CompositeArrow[str, int](
+                    ["a", "b", "c"], [0, 1]),
+                second_operand=CompositeArrow[str, int](
+                    ["b", "d", "c"], [-1, 9]),
+                expected_result=None),
+            dict(
+                binary_op=lambda x, y: x.comp(y, -1),
+                first_operand=CompositeArrow[str, int](
+                    ["a", "b", "c", "d"], [0, 1, 3]),
+                second_operand=CompositeArrow[str, int](
+                    ["c", "d", "e", "f"], [3, 9, -1]),
+                expected_result=CompositeArrow[str, int](
+                    ["a", "b", "c", "d", "e", "f"], [0, 1, 3, 9, -1])),
+            dict(
+                binary_op=lambda x, y: x.comp(y, -1),
+                first_operand=CompositeArrow[str, int](["a", "b"], [0]),
+                second_operand=CompositeArrow[str, int](["a", "b"], [0]),
+                expected_result=CompositeArrow[str, int](
+                    ["a", "b"], [0])),
+            dict(
+                binary_op=matmul,
+                first_operand=CompositeArrow[str, int](
+                    ["a", "b", "c"], [0, 1]),
+                second_operand=CompositeArrow[str, int](
+                    ["b", "d", "c"], [-1, 9]),
+                expected_result=None),
+            ]
+        }
+
+    @staticmethod
+    def test_getitem(
+            arrow: CompositeArrow[Hashable, Hashable],
+            index: Union[int, slice],
+            expected_result: Union[
+                Hashable, Tuple[Hashable, ...],
+                CompositeArrow[Hashable, Hashable]]
+        ) -> None:
+        """
+        test CompositeArrow item getting
+        """
+        result = arrow[index]
+        assert result == expected_result
+
+    @staticmethod
+    def test_derive(
+            arrow: CompositeArrow[Hashable, Hashable],
+            expected_result: CompositeArrow[Hashable, Hashable]) -> None:
+        """
+        Test arrow derivation
+        """
+        result = arrow.derive()
+        assert result == expected_result
+
+    @staticmethod
+    def test_suspend(
+            arrow: CompositeArrow[Hashable, Hashable]) -> None:
+        """
+        Test arrow suspension, by taking the suspension of an arrow derivation
+        on its source and target (which should realize the identity)
+        """
+        source = arrow[0]
+        target = arrow[-1]
+        derived = arrow.derive()
+        result = derived.suspend(source, target)
+        assert result == arrow
+
+    @staticmethod
+    def test_binary_op(
+            binary_op: Callable[[Any, Any], Any],
+            first_operand: CompositeArrow[Hashable, Hashable],
+            second_operand: CompositeArrow[Hashable, Hashable],
+            expected_result: Optional[CompositeArrow[Hashable, Hashable]]
+        ) -> None:
+        """
+        test a binary operation on composite arrows
+        """
+        if expected_result is None:
+            with pytest.raises(ValueError):
+                result = binary_op(first_operand, second_operand)
+        else:
+            result = binary_op(first_operand, second_operand)
+            assert result == expected_result

@@ -518,16 +518,17 @@ class CompositeArrow(Generic[NodeType, ArrowType], abc.Sequence):  # pylint: dis
             self._arrows = ()
         else:
             self._nodes = tuple(nodes)  # type: ignore
-        self._arrows = tuple(arrows)  # type: ignore
+            self._arrows = tuple(arrows)  # type: ignore
 
-        assert len(self.nodes) == len(self.arrows) + 1
+        if not (len(self.nodes) == len(self.arrows) + 1):
+            raise ValueError("nodes and arrows length don't match")
 
     def derive(self) -> CompositeArrow[ArrowType, NodeType]:
         """
         Return the arrow's inside, forfeiting first and last node.
         """
         return CompositeArrow[ArrowType, NodeType](  # type: ignore
-            self.arrows, self[1:-1:])
+            self.arrows, self[1:-1:1])
 
     def suspend(
             self, source: ArrowType, target: ArrowType
@@ -616,16 +617,50 @@ class CompositeArrow(Generic[NodeType, ArrowType], abc.Sequence):  # pylint: dis
         """
         return self.nodes == arrow.nodes and self.arrows == arrow.arrows
 
+    @property
+    def op(self) -> CompositeArrow[NodeType, ArrowType]:
+        """
+        Return arrow in reverse direction
+        """
+        return CompositeArrow(self.nodes[::-1], self.arrows[::-1])
+
+    def comp(
+        self, arrow: CompositeArrow[NodeType, ArrowType],
+        overlap: int) -> CompositeArrow[NodeType, ArrowType]:
+        """
+        return composite with n overlapping arrows in the middle
+        if n negative, or all overlapping from n-th position of first arrow
+        if n is positive
+        """
+        if overlap == 0:
+            return self + arrow
+        elif overlap < 0:
+            if not self[overlap:] == arrow[:-overlap]:  # type: ignore
+                raise ValueError("Trying to compose non-matching arrows")
+            nodes = self.nodes + arrow.nodes[-overlap + 1:]
+            arrows = self.arrows + arrow.arrows[-overlap:]
+        else:
+            if not self[overlap:] == arrow[:len(self) - overlap]:  #  type: ignore
+                raise ValueError("Trying to compose non-matching arrows")
+            nodes = self.nodes + arrow.nodes[len(self) - overlap + 1:]
+            arrows = self.arrows + arrow.arrows[len(self) - overlap:]
+
+        return CompositeArrow(nodes, arrows)
+
     def __add__(
             self, arrow: CompositeArrow[NodeType, ArrowType]
-        ) ->  CompositeArrow[NodeType, ArrowType]:
+        ) -> CompositeArrow[NodeType, ArrowType]:
         """
         compose 2 arrows together. The last node of the first must be the same
         as the first node of the second.
         """
-        assert self[-1] == arrow[0]  # type: ignore
-        nodes = self.nodes + arrow[1::1]  # type: ignore
-        arrows = self.arrows + arrow.arrows  # type: ignore
+        if not self[-1] == arrow[0]:  # type: ignore
+            raise ValueError(
+                "Last node of first arrow different"
+                " from first node of second arrow")
+
+        nodes = self.nodes + arrow.nodes[1:]
+        arrows = self.arrows + arrow.arrows
         return CompositeArrow(nodes, arrows)
 
     def __matmul__(
@@ -636,8 +671,7 @@ class CompositeArrow(Generic[NodeType, ArrowType], abc.Sequence):  # pylint: dis
             - the first composite with its first arrow removed
             - the second composite with its last arrow removed
         """
-        assert self[1:] == arrow[:-1]  # type: ignore
-        return self + arrow[-1:]  # type: ignore
+        return self.comp(arrow, overlap=1)
 
     def __hash__(self) -> int:
         """
