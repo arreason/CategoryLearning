@@ -1,0 +1,105 @@
+#!/bin/bash
+
+# An example hook script to verify what is about to be pushed.  Called by "git
+# push" after it has checked the remote status, but before anything has been
+# pushed.  If this script exits with a non-zero status nothing will be pushed.
+#
+# This hook is called with the following parameters:
+#
+# $1 -- Name of the remote to which the push is being done
+# $2 -- URL to which the push is being done
+#
+# If pushing without using a named remote those arguments will be equal.
+#
+# Information about the commits which are being pushed is supplied as lines to
+# the standard input in the form:
+#
+#   <local ref> <local sha1> <remote ref> <remote sha1>
+#
+# This sample shows how to prevent push of commits where the log message starts
+# with "WIP" (work in progress).
+
+remote="$1"
+url="$2"
+
+# Verify commit naming convention
+z40=0000000000000000000000000000000000000000
+
+# We can't inspect the whole history, since someone pushed and merged on master
+# using --no-verify and a broken commit message pattern...
+# TODO: when we have more commits, try and not inspect the whole history...
+start_sha="cc0f531f4df8c138f0f24c2fbb801b54cc80dfc5"
+
+while read local_ref local_sha remote_ref remote_sha
+do
+	if [ "$local_sha" = $z40 ]
+	then
+		# Handle delete
+		:
+	else
+		if [ "$remote_sha" = $z40 ]
+		then
+			# New branch, examine all commits
+			range="$start_sha..$local_sha"
+		else
+			# Update to existing branch, examine new commits
+			range="$remote_sha..$local_sha"
+		fi
+
+		# Check for commit message format
+		commit=`git rev-list -n 1 --no-merges --invert-grep -E --grep "^\s*(Revert \")?recatml\-[0-9]+" "$range"`
+        if [ -n "$commit" ]
+		then
+			echo >&2 "Commit ${commit} not starting with recatml-#issue in ${local_ref}, not pushing"
+			exit 1
+		fi
+	fi
+done
+
+pylint_check() {
+    # Pylint uses ORed exit status
+    # 0  no error
+    # 1  fatal message issued
+    # 2  error message issued
+    # 4  warning message issued
+    # 8  refactor message issued
+    # 16 convention message issued
+    # 32 usage error
+    folder=$1
+    error_mask=$2
+    disabling=$3
+    pylint -f colorized --disable="$disabling" "$folder"
+    failed=$(( ( $? & $error_mask ) > 0 ))
+    if [ $failed -ne 0 ]
+    then
+        echo "Pylint $folder exited with code $failed. Please fix your code."
+        exit 1
+    fi
+}
+
+type_check() {
+    folder=$1
+    mypy --ignore-missing-imports "$folder"
+    if [ $? -ne 0 ]
+    then
+        echo "mypy $folder exited with code $failed. Please fix your code."
+        exit 1
+    fi
+}
+
+# Run pylint on package
+# Warning and up are logged but are not failing the push
+pylint_check "catlearn/" 2#000011
+
+# Run pylint on the tests
+pylint_check "tests/" 2#000011 "no-self-use,duplicate-code"
+
+# Type check on package
+type_check "catlearn/"
+
+# Type check on tests
+type_check "tests/"
+
+# Execute unit tests
+py.test -sv --exitfirst --durations=15 --cov=catlearn/ --no-cov-on-fail
+
