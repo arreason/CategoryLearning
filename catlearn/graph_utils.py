@@ -505,7 +505,7 @@ class CompositeArrow(Generic[NodeType, ArrowType], abc.Sequence):  # pylint: dis
 
     def __init__(
             self, nodes: Union[NodeType, Iterable[NodeType]],
-            arrows: Iterable[ArrowType] = ()) -> None:
+            arrows: Optional[Iterable[ArrowType]] = None) -> None:
         """
         initialize a new composite arrow from nodes and arrow labels data
         """
@@ -513,13 +513,31 @@ class CompositeArrow(Generic[NodeType, ArrowType], abc.Sequence):  # pylint: dis
 
         # if no arrows are given, the first argument is assumed
         # to be a unique node
-        if not arrows:
+        if arrows is None:
             self._nodes = (nodes,)
+            self._arrows = ()
         else:
             self._nodes = tuple(nodes)  # type: ignore
+        self._arrows = tuple(arrows)  # type: ignore
 
-        self._arrows = tuple(arrows)
         assert len(self.nodes) == len(self.arrows) + 1
+
+    def derive(self) -> CompositeArrow[ArrowType, NodeType]:
+        """
+        Return the arrow's inside, forfeiting first and last node.
+        """
+        return CompositeArrow[ArrowType, NodeType](  # type: ignore
+            self.arrows, self[1:-1:])
+
+    def suspend(
+            self, source: ArrowType, target: ArrowType
+        ) -> CompositeArrow[ArrowType, NodeType]:
+        """
+        return an arrow whose derived is given arrow, with provided source
+        and target
+        """
+        return CompositeArrow[ArrowType, NodeType](
+            (source,) + self.arrows + (target,), self.nodes)
 
     @property
     def nodes(self) -> Tuple[NodeType, ...]:
