@@ -28,7 +28,7 @@ z40=0000000000000000000000000000000000000000
 # We can't inspect the whole history, since someone pushed and merged on master
 # using --no-verify and a broken commit message pattern...
 # TODO: when we have more commits, try and not inspect the whole history...
-start_sha="137701adec7e2a21571fb3427760893e08ef58cb"
+start_sha="cc0f531f4df8c138f0f24c2fbb801b54cc80dfc5"
 
 while read local_ref local_sha remote_ref remote_sha
 do
