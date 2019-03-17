@@ -5,7 +5,7 @@ each node is labeled with the generating function to use.
 """
 from __future__ import annotations
 from functools import reduce
-from operator import mul
+ from operator import mul
 from typing import (
     Iterable, Dict, FrozenSet, Optional, Callable, Tuple, Iterator)
 from itertools import chain

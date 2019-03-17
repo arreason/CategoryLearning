@@ -39,7 +39,6 @@ def pytest_generate_tests(metafunc):
         print(
             f"No specific parametrization found"
             f" for {metafunc.cls.__name__}.{func_name}")
-        metafunc.parametrize([], [])
 
 
 def random_int_list(min_length: int,

@@ -625,8 +625,8 @@ class CompositeArrow(Generic[NodeType, ArrowType], abc.Sequence):  # pylint: dis
         return CompositeArrow(self.nodes[::-1], self.arrows[::-1])
 
     def comp(
-        self, arrow: CompositeArrow[NodeType, ArrowType],
-        overlap: int) -> CompositeArrow[NodeType, ArrowType]:
+            self, arrow: CompositeArrow[NodeType, ArrowType],
+            overlap: int) -> CompositeArrow[NodeType, ArrowType]:
         """
         return composite with n overlapping arrows in the middle
         if n negative, or all overlapping from n-th position of first arrow
@@ -634,7 +634,7 @@ class CompositeArrow(Generic[NodeType, ArrowType], abc.Sequence):  # pylint: dis
         """
         if overlap == 0:
             return self + arrow
-        elif overlap < 0:
+        if overlap < 0:
             if not self[overlap:] == arrow[:-overlap]:  # type: ignore
                 raise ValueError("Trying to compose non-matching arrows")
             nodes = self.nodes + arrow.nodes[-overlap + 1:]
@@ -685,7 +685,7 @@ class CompositeArrow(Generic[NodeType, ArrowType], abc.Sequence):  # pylint: dis
         String representation of a composite arrow
         """
         return (
-            f"CompositeArrow({self[0]}"
+            f"{type(self).__name__}({self[0]}"
             + "".join(
                 f">{arrow}->{node}"
                 for (arrow, node) in zip(self.arrows, self.nodes[1:]))) + ")"
@@ -702,16 +702,39 @@ class CompositionGraph(Generic[NodeType, ArrowType, AlgebraType], abc.Mapping): 
     """
     def __init__(
             self,
-            generator: Callable[[NodeType, NodeType, ArrowType], AlgebraType],
-            comp: Callable[[CompositeArrow], AlgebraType],
+            generator: Callable[
+                [
+                    CompositionGraph[NodeType, ArrowType, AlgebraType],
+                    NodeType, NodeType, ArrowType],
+                AlgebraType],
+            comp: Callable[
+                [
+                    CompositionGraph[NodeType, ArrowType, AlgebraType],
+                    CompositeArrow],
+                AlgebraType],
             *arrows: CompositeArrow[NodeType, ArrowType]) -> None:
         """
         initialize a new composition graph.
         """
         super().__init__()
         self._graph = DirectedGraph[NodeType]()
-        self._generator = generator
-        self._comp = comp
+
+        def _generator(
+                src: NodeType, tar: NodeType, arr: ArrowType) -> AlgebraType:
+            """
+            Generator method attached to current composite graph
+            """
+            return generator(self, src, tar, arr)
+
+        self._generator = _generator
+
+        def _comp(
+                arrow: CompositeArrow[NodeType, ArrowType]) -> AlgebraType:
+            """
+            Composition method attached to current composite graph
+            """
+            return comp(self, arrow)
+        self._comp = _comp
 
         for arrow in arrows:
             self.add(arrow)
@@ -768,12 +791,29 @@ class CompositionGraph(Generic[NodeType, ArrowType, AlgebraType], abc.Mapping): 
         self._graph = DirectedGraph()
 
     def arrows(
-            self, src: NodeType,
-            tar: NodeType) -> Iterator[CompositeArrow[NodeType, ArrowType]]:
+            self, src: Optional[NodeType] = None,
+            tar: Optional[NodeType] = None
+        ) -> Iterator[CompositeArrow[NodeType, ArrowType]]:
         """
-        get an iterator over all arrows starting at src and ending at tar
+        get an iterator over all arrows starting at src and ending at tar.
+        If source or arrow is None, will loop through all possible sources
+        and arrows
         """
-        return (arr.suspend(src, tar) for arr in self.graph[src][tar])
+        if src is None and tar is None:
+            # iterate over all edges of graph in this case
+            return iter(self)
+        if src is not None and tar is not None:
+            # iterate over all edges from src to tar
+            return (arr.suspend(src, tar) for arr in self.graph[src][tar])
+        if src is not None:
+            # iterate over all edges starting at src
+            return chain(
+                *(self.arrows(src, node) for node in self.graph[src]))
+
+        # case where tar is not None but src is None
+        # iterate over all edges ending at tar
+        return chain(*(
+            self.arrows(node, tar) for node in self.graph.op[tar]))
 
     def __iter__(self) -> Iterator[CompositeArrow]:
         """
@@ -804,11 +844,11 @@ class CompositionGraph(Generic[NodeType, ArrowType, AlgebraType], abc.Mapping): 
         # remove the edge from the graph
         del self.graph[arrow[0]][arrow[-1]][arrow.derive()]
         if not self.graph[arrow[0]][arrow[-1]]:
-            self.graph.remove_edge(arrow[0], arrow[1])
+            self.graph.remove_edge(arrow[0], arrow[-1])
 
         # get all arrows to source and from target of the graph
-        fst = self.graph.op[arrow[0]].copy()
-        scd = self.graph[arrow[-1]].copy()
+        fst = list(self.arrows(tar=arrow[0]))  # type: ignore
+        scd = list(self.arrows(src=arrow[-1]))  # type: ignore
 
         # if source or target is not linked to other points of graph,
         # remove it
@@ -830,5 +870,6 @@ class CompositionGraph(Generic[NodeType, ArrowType, AlgebraType], abc.Mapping): 
         Get string representation of the composition graph
         """
         return (
-            "{" + ", ".join(f"{key}: {value}" for (key, value) in self.items())
-            + "}")
+            f"{type(self).__name__}("
+            + ", ".join(f"{key}: {value}" for (key, value) in self.items())
+            + ")")

@@ -8,7 +8,7 @@ tests for random graph generation
 from typing import (
     Any, Callable, Hashable, Dict, Iterable, Tuple,
     Set, FrozenSet, Optional, List, Union)
-from itertools import repeat
+from itertools import repeat, combinations
 from collections import Counter
 from copy import copy
 from operator import and_, or_, add, mul, matmul
@@ -22,6 +22,15 @@ from catlearn.graph_utils import (
     CompositeArrow, CompositionGraph)
 
 from tests.test_tools import pytest_generate_tests
+
+
+def hex_arrow(length: int) -> CompositeArrow[str, str]:
+    """
+    Define a composite arrow from integer hex codes of a given length
+    """
+    nodes = [hex(idx) for idx in range(1 + length)]
+    arrows = ["_".join(hexes) for hexes in zip(nodes[:-1], nodes[1:])]
+    return CompositeArrow(nodes, arrows)
 
 
 @pytest.fixture(params=[0, 432358, 98765, 326710, 54092])
@@ -38,6 +47,14 @@ def pruning_factor(request: Any) -> float:
     pruning factor for random graph pruning operations
     """
     return request.param
+
+
+@pytest.fixture(params=[3, 5, 7])
+def to_add(request: Any) -> CompositeArrow[str, str]:
+    """
+    return an arrow to add to CompositionGraph object
+    """
+    return hex_arrow(request.param)
 
 
 class TestDirectedGraph:
@@ -680,4 +697,66 @@ class TestCompositionGraph:
     """
     Class for all tests pertaining to the class CompositionGraph
     """
-    pass
+
+    def get_repr_graph(self):
+        """
+        get an empty composition graph in which stored values are the string
+        representations of CompositionArrow[str, str] type.
+        """
+        def gen(
+                _: CompositionGraph[str, str, str],
+                node0: str, node1: str, arrow: str) -> str:
+            """
+            Generation method for test graph
+            """
+            return repr(CompositeArrow[str, str]([node0, node1], [arrow]))
+
+        def comp(
+                graph: CompositionGraph[str, str, str],
+                arrow: CompositeArrow[str, str]) -> str:
+            """
+            Composition method for test graph
+            """
+            for idx in range(1, len(arrow)):
+                    assert arrow[idx:] in graph and arrow[:idx] in graph
+
+            return repr(arrow)
+
+        self.generator = gen
+        self.comp = comp
+
+        return CompositionGraph(gen, comp)
+
+    def test_getitem(
+            self, to_add: CompositeArrow[str, str]) -> None:
+        """
+        Test item getting works properly
+        """
+        graph = self.get_repr_graph()
+        graph.add(to_add)
+
+        if len(to_add) == 1:
+            assert to_add == self.generator(
+                graph, to_add[0], to_add[-1], to_add.arrows[0])
+        elif len(to_add) >= 2:
+            assert graph[to_add] == self.comp(graph, to_add)
+        else:
+            assert pytest.raises(IndexError)
+
+    def test_add(self, to_add: CompositeArrow[str, str]) -> None:
+        """
+        Verify that arrow adding works.
+        """
+        graph = self.get_repr_graph()
+        graph.add(to_add)
+
+        for fst, last in combinations(range(len(to_add)), 2):
+            assert (
+                graph[to_add[fst:last]] == self.comp(graph, to_add[fst:last]))
+
+    def test_del(self, to_add: CompositeArrow[str, str]) -> None:
+        for fst, last in combinations(range(len(to_add)), 2):
+            graph = self.get_repr_graph()
+            graph.add(to_add)
+            del graph[to_add[fst:last]]
+            assert to_add not in graph
