@@ -703,14 +703,6 @@ class TestCompositionGraph:
         get an empty composition graph in which stored values are the string
         representations of CompositionArrow[str, str] type.
         """
-        def gen(
-                _: CompositionGraph[str, str, str],
-                node0: str, node1: str, arrow: str) -> str:
-            """
-            Generation method for test graph
-            """
-            return repr(CompositeArrow[str, str]([node0, node1], [arrow]))
-
         def comp(
                 graph: CompositionGraph[str, str, str],
                 arrow: CompositeArrow[str, str]) -> str:
@@ -722,10 +714,9 @@ class TestCompositionGraph:
 
             return repr(arrow)
 
-        self.generator = gen
         self.comp = comp
 
-        return CompositionGraph(gen, comp)
+        return CompositionGraph(comp)
 
     def test_getitem(
             self, to_add: CompositeArrow[str, str]) -> None:
@@ -735,10 +726,7 @@ class TestCompositionGraph:
         graph = self.get_repr_graph()
         graph.add(to_add)
 
-        if len(to_add) == 1:
-            assert to_add == self.generator(
-                graph, to_add[0], to_add[-1], to_add.arrows[0])
-        elif len(to_add) >= 2:
+        if len(to_add) >= 1:
             assert graph[to_add] == self.comp(graph, to_add)
         else:
             assert pytest.raises(IndexError)

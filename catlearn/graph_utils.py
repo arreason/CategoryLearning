@@ -702,11 +702,6 @@ class CompositionGraph(Generic[NodeType, ArrowType, AlgebraType], abc.Mapping): 
     """
     def __init__(
             self,
-            generator: Callable[
-                [
-                    CompositionGraph[NodeType, ArrowType, AlgebraType],
-                    NodeType, NodeType, ArrowType],
-                AlgebraType],
             comp: Callable[
                 [
                     CompositionGraph[NodeType, ArrowType, AlgebraType],
@@ -718,15 +713,6 @@ class CompositionGraph(Generic[NodeType, ArrowType, AlgebraType], abc.Mapping): 
         """
         super().__init__()
         self._graph = DirectedGraph[NodeType]()
-
-        def _generator(
-                src: NodeType, tar: NodeType, arr: ArrowType) -> AlgebraType:
-            """
-            Generator method attached to current composite graph
-            """
-            return generator(self, src, tar, arr)
-
-        self._generator = _generator
 
         def _comp(
                 arrow: CompositeArrow[NodeType, ArrowType]) -> AlgebraType:
@@ -763,10 +749,8 @@ class CompositionGraph(Generic[NodeType, ArrowType, AlgebraType], abc.Mapping): 
 
         # the case of length 1 arrows is simple: generate the value
         # and put it in the graph
-        if len(arrow) == 1:
-            self.graph[arrow[0]][arrow[-1]][arrow.derive()] = self._generator(  # type: ignore
-                arrow[0], arrow[-1], arrow.arrows[0])
-        else:
+
+        if len(arrow) >= 2:
             # the case of higher order arrows is recursively defined:
             # all subcomposites of the arrow should be in the graph, so we have
             # to make the computation for all of them
@@ -780,9 +764,9 @@ class CompositionGraph(Generic[NodeType, ArrowType, AlgebraType], abc.Mapping): 
                 if scd_arrow not in self:
                     self.add(scd_arrow)  # type: ignore
 
-            # compute the value of the total arrow and register it
-            value = self._comp(arrow)
-            self._graph[arrow[0]][arrow[-1]][arrow.derive()] = value
+        # compute the value of the total arrow and register it
+        value = self._comp(arrow)
+        self._graph[arrow[0]][arrow[-1]][arrow.derive()] = value
 
     def flush(self) -> None:
         """
