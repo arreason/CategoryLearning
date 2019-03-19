@@ -10,8 +10,7 @@ for the categorical model
 from itertools import chain
 from types import MappingProxyType
 from typing import (
-    Any, Callable, Iterable, Union, Mapping, Generic,
-    Sequence, Tuple, Hashable, TypeVar)
+    Any, Callable, Iterable, Mapping, Generic, TypeVar)
 
 import torch
 
@@ -57,12 +56,10 @@ class ScoringModel(AbstractModel):
 
 NodeType = TypeVar("NodeType")
 ArrowType = TypeVar("ArrowType")
-AlgebraType = TypeVar("AlgebraType")
-DataType = TypeVar("DataType")
 
 
 class RelationCache(
-        Generic[DataType, AlgebraType, NodeType, ArrowType],
+        Generic[NodeType, ArrowType],  # pylint: disable=unsubscriptable-object
         CompositionGraph[NodeType, ArrowType, torch.Tensor]):
     """
     A cache to keep the values of all relations
@@ -70,10 +67,11 @@ class RelationCache(
     def __init__(
             self,
             generators: Mapping[
-                ArrowType,
-                Callable[[DataType, DataType], AlgebraType]],
-            scorer: Callable[[DataType, DataType, AlgebraType], torch.Tensor],
-            comp: Callable[[AlgebraType, AlgebraType], AlgebraType],
+                ArrowType, Callable[
+                    [torch.tensor, torch.tensor], torch.Tensor]],
+            scorer: Callable[
+                [torch.Tensor, torch.Tensor, torch.Tensor], torch.Tensor],
+            comp: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
             datas: Mapping[NodeType, torch.Tensor],
             *arrows: CompositeArrow[NodeType, ArrowType]) -> None:
         """
@@ -96,14 +94,14 @@ class RelationCache(
         self._nb_compositions = 0
 
         # keep in memory the datas dictionary
-        self._datas = datas
+        self._datas = dict(datas)
 
         # memorize existing arrow model names
         self._arrow_names = set(generators)
 
         def rel_comp(
                 cache, arrow: CompositeArrow[NodeType, ArrowType]
-                ) -> AlgebraType:
+            ) -> torch.Tensor:
             """
             compute the composite of all order 1 arrows, and account for
             causality cost
@@ -111,21 +109,21 @@ class RelationCache(
             # case of length 1
             if len(arrow) == 1:
                 rel_value = generators[arrow.arrows[0]](
-                    cache._datas[arrow[0]], cache._datas[arrow[-1]])
+                    cache.data(arrow[0:0]), cache.data(arrow[1:1]))
                 rel_score = scorer(
-                    cache._datas[arrow[0]], cache._datas[arrow[-1]], rel_value)
+                    cache.data(arrow[0:0]), cache.data(arrow[1:1]),
+                    rel_value)
                 return rel_score, rel_value
 
             # now take care of case of length >= 2
-            # compute the value of the arrow
+            # compute the value of the arrow by composition
             comp_value = comp(cache.data(arrow[:1]), cache.data(arrow[1:]))
             comp_scores = scorer(
-                cache.data[arrow[0]], cache.data[arrow[-1]], comp_value)
+                cache.data(arrow[0:0]), cache.data(arrow.op[0:0]), comp_value)
             comp_validity = comp_scores.sum()
 
             # recursively access all the scores of the subarrow splits
             # and check the composition score
-            comp_final_scores = comp_scores.clone()
             for idx in range(1, len(arrow)):
 
                 # compute update to causality score
@@ -135,11 +133,13 @@ class RelationCache(
                     torch.log(
                         comp_validity/(fst_scores * scd_scores).sum()))
                 cache._causality_cost += causal_score
-                cache._nb_comp += 1
+                cache._nb_compositions += 1
 
                 # if causality update > 0., relation is not valid: 0. scores
                 if causal_score > 0.:
-                    comp_final_scores[:] = 0.
+                    comp_final_scores = torch.zeros(comp_scores.shape)
+                else:
+                    comp_final_scores = comp_scores
 
             return comp_final_scores, comp_value
 
@@ -147,25 +147,30 @@ class RelationCache(
 
     @property
     def causality_cost(self):
-        return self._causality_cost/self._nb_comp
+        """
+        current value of causality cost on the whole cache
+        """
+        return self._causality_cost/self._nb_compositions
 
     def data(
-            self, arrow: CompositeArrow[ArrowType, NodeType]
-            ) -> Union[DataType, AlgebraType]:
+            self, arrow: CompositeArrow[NodeType, ArrowType]
+        ) -> torch.Tensor:
         """
         Takes as argument a composite arrow.
         Returns:
             - if length of the arrow is 0, the corresponding data point
             - if length of arrow >=1, the relation value
         """
-        if len(arrow) == 0:
-            return self._datas[arrow[0]]
-        else:
+        if arrow:
             return super().__getitem__(arrow)[1]
 
+        # if arrow has length 0, return data corresponding to its node
+        return self._datas[arrow[0]]  # type: ignore
+
+
     def __getitem__(
-            self, arrow: CompositeArrow[ArrowType, NodeType]
-            ) -> Union[DataType, Tuple[torch.Tensor, AlgebraType]]:
+            self, arrow: CompositeArrow[NodeType, ArrowType]
+        ) -> torch.Tensor:
         """
         Returns the value associated to an arrow.
         If the arrow has length 0 (contains only a node):
@@ -174,24 +179,24 @@ class RelationCache(
             returns the score vector of the relation
         """
         if not arrow:
-            raise ValueError("Cannot get the score of length 1 arrow")
+            raise ValueError("Cannot get the score of an arrow of length 0")
         else:
             return super().__getitem__(arrow)[0]
 
-    def __setitem__(self, node: NodeType, data_point: DataType) -> None:
+    def __setitem__(self, node: NodeType, data_point: torch.Tensor) -> None:
         """
         set value of a new data point.
         Note: cannot set the value of an arrow, as these are computed using
         relation generation and compositions.
         """
-        self._data[node] = data_point
+        self._datas[node] = data_point
 
     def add(self, arrow: CompositeArrow[NodeType, ArrowType]) -> None:
         """
         add composite arrow to the cache, starting by checking that data
         for all the points is available.
         """
-        if not set(arrow.nodes) <= set(self._dict):
+        if not set(arrow.nodes) <= set(self._datas):
             raise ValueError(
                 "Cannot add a composite whose support is not included"
                 "in the base dataset")
@@ -205,7 +210,7 @@ class RelationCache(
         super().flush()
         self._datas = {}
         self._causality_cost = 0.
-        self._nb_comp = 0.
+        self._nb_compositions = 0
 
     def match(self, labels: DirectedGraph[NodeType]) -> torch.Tensor:
         """
@@ -213,7 +218,7 @@ class RelationCache(
         vector, get the best match in the graph. if No match is found, set to
         + infinity.
         """
-        result_graph = DirectedGraph[NodeType]
+        result_graph = DirectedGraph[NodeType]()
         for (src, tar) in labels.edges:
             # add edge if necessary
             if not result_graph.has_edge(src, tar):
@@ -276,7 +281,7 @@ class DecisionCatModel:
 
     def __init__(
             self,
-            relation_models: Mapping[Hashable, RelationModel],
+            relation_models: Mapping[ArrowType, RelationModel],
             scoring_model: ScoringModel,
             algebra_model: Algebra,
             epsilon: float = DEFAULT_EPSILON) -> None:
@@ -301,11 +306,11 @@ class DecisionCatModel:
         return self._algebra_model
 
     @property
-    def relations(self) -> Mapping[Hashable, RelationModel]:
+    def relations(self) -> Mapping[ArrowType, RelationModel]:
         """
         access the mapping to relation models
         """
-        return MappingProxyType(self._relation_model)
+        return MappingProxyType(self._relation_models)
 
     def score(
             self, source: torch.Tensor, target: torch.Tensor,
@@ -325,9 +330,9 @@ class DecisionCatModel:
         return remap_subproba(main_score, reference)
 
     def generate_cache(
-            self, data_points: Mapping[Hashable, torch.Tensor],
-            relations: Sequence[CompositeArrow[Hashable, Hashable]]
-            ) -> torch.Tensor:
+            self, data_points: Mapping[NodeType, torch.Tensor],
+            relations: Iterable[CompositeArrow[NodeType, ArrowType]]
+        ) -> torch.Tensor:
         """
         generate a batch from a list of relations and datas
         """
@@ -337,9 +342,9 @@ class DecisionCatModel:
 
     def cost(
             self,
-            data_points: Mapping[Hashable, torch.Tensor],
-            relations: Sequence[CompositeArrow[Hashable, Hashable]],
-            labels: DirectedGraph[Hashable]) -> torch.Tensor:
+            data_points: Mapping[NodeType, torch.Tensor],
+            relations: Iterable[CompositeArrow[NodeType, ArrowType]],
+            labels: DirectedGraph[NodeType]) -> torch.Tensor:
         """
         Generates the matching cost function on a relation, given labels
         inputs
@@ -377,7 +382,7 @@ class TrainableDecisionCatModel(DecisionCatModel):
 
     def __init__(
             self,
-            relation_models: Mapping[Hashable, RelationModel],
+            relation_models: Mapping[ArrowType, RelationModel],
             scoring_model: ScoringModel,
             algebra_model: Algebra,
             optimizer: Callable,
@@ -402,7 +407,7 @@ class TrainableDecisionCatModel(DecisionCatModel):
         returns the dimension required to store one relation using
         the underlying algebra model
         """
-        return self.algebra_model.flatdim
+        return self.algebra.flatdim
 
     @property
     def parameters(self) -> Callable[[], Iterable[Any]]:
@@ -411,7 +416,7 @@ class TrainableDecisionCatModel(DecisionCatModel):
         """
         return lambda: chain(*(rel.parameters()
                                for rel in self.relations.values()),
-                             self.scoring_model.parameters())
+                             self._scoring_model.parameters())
 
     def freeze(self) -> None:
         """
@@ -431,9 +436,9 @@ class TrainableDecisionCatModel(DecisionCatModel):
 
     def train(
             self,
-            data_points: Mapping[Hashable, torch.Tensor],
-            relations: Iterable[CompositeArrow[Hashable, Hashable]],
-            labels: DirectedGraph[Hashable],
+            data_points: Mapping[NodeType, torch.Tensor],
+            relations: Iterable[CompositeArrow[NodeType, ArrowType]],
+            labels: DirectedGraph[NodeType],
             step=True) -> torch.Tensor:
         """
         perform one training step on a batch of tuples

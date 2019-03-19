@@ -160,7 +160,10 @@ def clip_proba(
         dim: the dimension on which values can be interpreted as probabilities
         epsilon: the clipping numerical tolerance
     """
-    vector_size = float(proba_vector.shape[dim])
+    if proba_vector.ndimension() == 0:
+        vector_size = 1.
+    else:
+        vector_size = float(proba_vector.shape[dim])
     return (1. - vector_size * epsilon) * proba_vector + epsilon
 
 
