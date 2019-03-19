@@ -127,11 +127,10 @@ class RelationCache(
             for idx in range(1, len(arrow)):
 
                 # compute update to causality score
-                fst_scores = cache[arrow[:idx]]
-                scd_scores = cache[arrow[idx:]]
+                fst_scores = cache[arrow[:idx]].sum()
+                scd_scores = cache[arrow[idx:]].sum()
                 causal_score = torch.relu(
-                    torch.log(
-                        comp_validity/(fst_scores * scd_scores).sum()))
+                    torch.log(comp_validity/(fst_scores * scd_scores)))
                 cache._causality_cost += causal_score
                 cache._nb_compositions += 1
 
