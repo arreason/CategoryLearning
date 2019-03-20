@@ -3,9 +3,9 @@
 """
 Tests for the categorical_model file.
 """
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 from functools import reduce
-from itertools import combinations
+from itertools import combinations, product
 from math import inf
 import random
 
@@ -17,7 +17,7 @@ import pytest
 from catlearn.tensor_utils import subproba_kl_div
 from catlearn.categorical_model import (
     DEFAULT_EPSILON, RelationModel, ScoringModel, CompositeArrow,
-    RelationCache, DecisionCatModel, TrainableDecisionCatModel)
+    DirectedGraph, RelationCache, DecisionCatModel, TrainableDecisionCatModel)
 from catlearn.algebra_models import (
     Algebra, VectAlgebra, MatrixAlgebra, AffineAlgebra)
 from catlearn.causal_generation_utils import (
@@ -48,6 +48,11 @@ def nb_relations(request: Any) -> int:
     return request.param
 
 
+@pytest.fixture(params=[2, 5])
+def nb_labels(request: Any) -> int:
+    """ number of randomly chosen labels under which to match"""
+    return request.param
+
 @pytest.fixture(params=[(2, 8)])
 def dim_rels(request: Any) -> int:
     """ Number of relation models """
@@ -62,8 +67,8 @@ def algebra(request: Any, dim_rels: int) -> Algebra:
 
 @pytest.fixture
 def relations(
-    request: Any, nb_relations: int, nb_features: int,
-    algebra: Algebra) -> Dict[int, RelationModel]:
+        request: Any, nb_relations: int, nb_features: int,
+        algebra: Algebra) -> Dict[int, RelationModel]:
     """ relation models """
 
     class CustomRelation(RelationModel):
@@ -117,10 +122,20 @@ class TestRelationCache:
     Tests for RelationCache class
     """
     @staticmethod
-    def get_cache(relations, scoring, algebra) -> RelationCache:
+    def get_cache(
+            relations: Dict[int, RelationModel],
+            scoring: ScoringModel, algebra: Algebra,
+            data_dim: Optional[int] = None,
+            *arr: CompositeArrow[int, int]) -> RelationCache:
         """
-        get a relation cache
+        get a relation cache, initialized with random data and one composite
+        arrow if given (otherwise it is empty)
         """
+        if arr:
+            datas = {idx: torch.rand(data_dim) for idx in set().union(*arr)}
+            return RelationCache[int, int](
+                relations, scoring, algebra.comp, datas, *arr)
+
         return RelationCache[int, int](relations, scoring, algebra.comp, {})
 
     @staticmethod
@@ -132,14 +147,9 @@ class TestRelationCache:
         """
         Test stored value of relation
         """
-        # create cache and add datapoints of the arrow to the cache
-        # with random value
-        cache = TestRelationCache.get_cache(relations, scoring, algebra)
-        for idx in arrow:
-            cache[idx] = torch.rand(nb_features)
-
-        # add arrow, now that all its support is in the cache
-        cache.add(arrow)
+        # create cache with one composite arrow
+        cache = TestRelationCache.get_cache(
+            relations, scoring, algebra, nb_features, arrow)
 
         # compute expected value of corresponding relation
         expected_result = reduce(
@@ -161,14 +171,9 @@ class TestRelationCache:
         """
         Test stored value of score
         """
-        # create cache and add datapoints of the arrow to the cache
-        # with random values
-        cache = TestRelationCache.get_cache(relations, scoring, algebra)
-        for idx in arrow:
-            cache[idx] = torch.rand(nb_features)
-
-        # add arrow, now that all its support is in the cache
-        cache.add(arrow)
+        # create cache with one composite arrow
+        cache = TestRelationCache.get_cache(
+            relations, scoring, algebra, nb_features, arrow)
 
         # collect minimum of all total scores of parts of arrow
         # note that actual score of arrow is also taken in the loop
@@ -190,6 +195,67 @@ class TestRelationCache:
 
         assert subproba_kl_div(
             cache[arrow], expected_result) <= DEFAULT_EPSILON
+
+    @staticmethod
+    def test_matching(
+            nb_features: int,
+            nb_labels: int,
+            relations: Dict[int, RelationModel],
+            scoring: ScoringModel, algebra: Algebra,
+            arrow: CompositeArrow[int, int]) -> None:
+        """
+        Test for graph matching
+        """
+        # create cache with one composite arrow
+        cache = TestRelationCache.get_cache(
+            relations, scoring, algebra, nb_features, arrow)
+
+        # create label graph
+        labels = DirectedGraph[int]()
+        sources = random.choices(arrow.nodes, k=nb_labels)
+        targets = random.choices(arrow.nodes, k=nb_labels)
+
+        for idx, (src, tar) in enumerate(product(sources, targets)):
+            labels.add_edge(src, tar)
+            scores = torch.softmax(
+                torch.rand(1 + scoring.nb_scores), dim=-1)[..., :-1]
+            labels[src][tar][idx] = scores
+
+        # match label graph against cache
+        matches = cache.match(labels)
+
+        # check that matches graph contains everything necessary
+        for (src, tar), edge_labels in labels.edges().items():
+            for label, value in edge_labels.items():
+                # check label has been matched
+                assert label in matches[src][tar]
+
+                # collect available scores for matching
+                available = {
+                    idx.derive(): cache[idx] for idx in cache.arrows(src, tar)}
+
+                # evaluate all models if none available
+                if not available:
+                    available = {
+                        CompositeArrow(arr): scoring(
+                            cache.data(CompositeArrow(src)),
+                            cache.data(CompositeArrow(tar)),
+                            relations[arr](
+                                cache.data(CompositeArrow(src)),
+                                cache.data(CompositeArrow(tar))))
+                        for arr in cache.generators}
+
+                kldivs = {
+                    idx: subproba_kl_div(score, value)
+                    for idx, score in available.items()}
+
+                expected_match = min(kldivs, key=kldivs.get)
+                expected_cost = kldivs[expected_match]
+
+                assert matches[src][tar][label][0] == expected_match
+                assert (
+                    (matches[src][tar][label][1] - expected_cost).abs()
+                    <= 2. * DEFAULT_EPSILON)
 
 
 class TestDecisionCatModel:

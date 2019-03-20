@@ -97,7 +97,7 @@ class RelationCache(
         self._datas = dict(datas)
 
         # memorize existing arrow model names
-        self._arrow_names = set(generators)
+        self.generators = generators
 
         def rel_comp(
                 cache, arrow: CompositeArrow[NodeType, ArrowType]
@@ -108,7 +108,7 @@ class RelationCache(
             """
             # case of length 1
             if len(arrow) == 1:
-                rel_value = generators[arrow.arrows[0]](
+                rel_value = self.generators[arrow.arrows[0]](
                     cache.data(arrow[0:0]), cache.data(arrow[1:1]))
                 rel_score = scorer(
                     cache.data(arrow[0:0]), cache.data(arrow[1:1]),
@@ -143,6 +143,7 @@ class RelationCache(
             return comp_final_scores, comp_value
 
         super().__init__(rel_comp, *arrows)
+
 
     @property
     def causality_cost(self):
@@ -218,32 +219,36 @@ class RelationCache(
         + infinity.
         """
         result_graph = DirectedGraph[NodeType]()
-        for (src, tar) in labels.edges:
+        for src, tar in labels.edges:
             # add edge if necessary
             if not result_graph.has_edge(src, tar):
                 result_graph.add_edge(src, tar)
 
             # go through labels and match them. Keep only the best
-            for label in result_graph[src][tar]:
+            for name, label in labels[src][tar].items():
                 # check if arrows exist to match label
-                # if not evaluate all the arrow generation models
-                if result_graph[src][tar]:
-                    scores = self.graph[src][tar]
-                else:
+                try:
                     scores = {
-                        CompositeArrow(
-                            [src, tar], [arr]): self._comp(
-                                CompositeArrow([src, tar], [arr]))
-                        for arr in self._arrow_names}
+                        arr.derive(): self[arr]
+                        for arr in self.arrows(src, tar)}
+                except KeyError:
+                    scores = {}
+
+                # if no score is available, evaluate all models
+                if not scores:
+                    scores = {
+                        CompositeArrow(arr): self._comp(
+                                CompositeArrow([src, tar], [arr]))[0]
+                        for arr in self.generators}
 
                 # evaluate candidate relationships
                 candidates = {
                     arr: subproba_kl_div(score, label)
-                    for arr, (score, _) in scores.items()}
+                    for arr, score in scores.items()}
 
                 # save the best match in result graph
-                best_match = max(candidates, key=candidates.get)
-                result_graph[src][tar][label] = (
+                best_match = min(candidates, key=candidates.get)
+                result_graph[src][tar][name] = (
                     best_match, candidates[best_match])
 
         return result_graph
@@ -438,7 +443,7 @@ class TrainableDecisionCatModel(DecisionCatModel):
             data_points: Mapping[NodeType, torch.Tensor],
             relations: Iterable[CompositeArrow[NodeType, ArrowType]],
             labels: DirectedGraph[NodeType],
-            step=True) -> torch.Tensor:
+            step: bool = True) -> torch.Tensor:
         """
         perform one training step on a batch of tuples
         """
