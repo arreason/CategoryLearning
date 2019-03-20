@@ -11,7 +11,7 @@ from functools import reduce
 from operator import mul
 import torch
 
-from catlearn.tensor_utils import repeat_tensor, zeros_like
+from catlearn.tensor_utils import repeat_tensor, zeros_like, DEFAULT_EPSILON
 
 
 class Algebra:
@@ -64,7 +64,7 @@ class Algebra:
             self,
             left: torch.Tensor,
             right: torch.Tensor,
-            epsilon: float = 1e-5) -> bool:
+            epsilon: float = DEFAULT_EPSILON) -> bool:
         """
         Default equality operator (expects float-castable tensors)
         """
@@ -292,7 +292,7 @@ class AffineAlgebra(Algebra):
 
         # shape and size of batch
         batch_shape = data_tuple.shape[:-1]
-        n_points = reduce(mul, batch_shape)
+        n_points = reduce(mul, batch_shape, 1)
 
         # create a single unit, then repeat it
         single_unit = torch.cat((torch.eye(self.dim,
@@ -314,7 +314,7 @@ class AffineAlgebra(Algebra):
         assert data1.shape[-1] == self.flatdim, "inputs should match model dim"
 
         # get batch shape and size
-        n_points = reduce(mul, data1.shape) // self.flatdim
+        n_points = reduce(mul, data1.shape, 1) // self.flatdim
 
         # flatten batches
         flat1 = data1.view([n_points, self.flatdim])

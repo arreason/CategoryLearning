@@ -707,7 +707,8 @@ class CompositionGraph(Generic[NodeType, ArrowType, AlgebraType], abc.Mapping): 
                     CompositionGraph[NodeType, ArrowType, AlgebraType],
                     CompositeArrow],
                 AlgebraType],
-            *arrows: CompositeArrow[NodeType, ArrowType]) -> None:
+            arrows: Iterable[
+                CompositeArrow[NodeType, ArrowType]] = iter(())) -> None:
         """
         initialize a new composition graph.
         """

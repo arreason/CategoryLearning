@@ -73,7 +73,8 @@ class RelationCache(
                 [torch.Tensor, torch.Tensor, torch.Tensor], torch.Tensor],
             comp: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
             datas: Mapping[NodeType, torch.Tensor],
-            *arrows: CompositeArrow[NodeType, ArrowType]) -> None:
+            arrows: Iterable[CompositeArrow[NodeType, ArrowType]],
+            epsilon: float = DEFAULT_EPSILON) -> None:
         """
         Initialize a new cache of relations, from:
            generators:  mapping whose:
@@ -85,7 +86,7 @@ class RelationCache(
            comp: a composition operation returning a relation value from
                2 relation values (supposed associative)
         """
-
+        self.epsilon = epsilon
         # base assumption: all arrows node supports should be in
 
         # save a tensor containing the causality cost and the number
@@ -130,7 +131,10 @@ class RelationCache(
                 fst_scores = cache[arrow[:idx]].sum()
                 scd_scores = cache[arrow[idx:]].sum()
                 causal_score = torch.relu(
-                    torch.log(comp_validity/(fst_scores * scd_scores)))
+                    torch.log(
+                        (self.epsilon + comp_validity) /
+                        (self.epsilon + fst_scores * scd_scores)))
+
                 cache._causality_cost += causal_score
                 cache._nb_compositions += 1
 
@@ -142,7 +146,7 @@ class RelationCache(
 
             return comp_final_scores, comp_value
 
-        super().__init__(rel_comp, *arrows)
+        super().__init__(rel_comp, arrows)
 
 
     @property
@@ -150,7 +154,7 @@ class RelationCache(
         """
         current value of causality cost on the whole cache
         """
-        return self._causality_cost/self._nb_compositions
+        return self._causality_cost/max(self._nb_compositions, 1)
 
     def data(
             self, arrow: CompositeArrow[NodeType, ArrowType]
@@ -326,9 +330,8 @@ class DecisionCatModel:
         assert source.shape == target.shape
         assert source.shape[:-1] == relation.shape[:-1]
 
-        batch_shape = relation.shape[:-1]
         reference = self._scoring_model(
-            source, source, self.algebra.unit(batch_shape))
+            source, source, self.algebra.unit(source))
         main_score = self._scoring_model(
             source, target, relation)
         return remap_subproba(main_score, reference)
@@ -342,7 +345,7 @@ class DecisionCatModel:
         """
         return RelationCache(
             self.relations, self.score,
-            self.algebra.comp, data_points, *relations)
+            self.algebra.comp, data_points, relations)
 
     def cost(
             self,
@@ -357,9 +360,11 @@ class DecisionCatModel:
         cache = self.generate_cache(data_points, relations)
         matched = cache.match(labels)
 
-        total = sum(score[1] for score in matched.values())
-        nb_labels = sum(1 for score in matched.values())
-        return total/nb_labels + cache.causality_cost
+        total = sum(
+            sum(elem for _, elem in costs.values())
+            for costs in matched.edges.values())
+        nb_labels = sum(len(costs) for costs in matched.edges.values())
+        return total/max(nb_labels, 1) + cache.causality_cost
 
 
 class TrainableDecisionCatModel(DecisionCatModel):

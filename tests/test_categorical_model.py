@@ -3,7 +3,7 @@
 """
 Tests for the categorical_model file.
 """
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Iterable
 from functools import reduce
 from itertools import combinations, product
 from math import inf
@@ -52,6 +52,7 @@ def nb_relations(request: Any) -> int:
 def nb_labels(request: Any) -> int:
     """ number of randomly chosen labels under which to match"""
     return request.param
+
 
 @pytest.fixture(params=[(2, 8)])
 def dim_rels(request: Any) -> int:
@@ -117,6 +118,25 @@ def arrow(request: Any, nb_relations: int) -> CompositeArrow[int, int]:
         random.choices(range(nb_relations), k=request.param))
 
 
+def get_labels(
+        nodes: Iterable[int],
+        nb_scores: int, nb_labels: int) -> DirectedGraph[int]:
+    """
+    Generate a random label graph
+    """
+    labels = DirectedGraph[int]()
+    sources = random.choices(nodes, k=nb_labels)
+    targets = random.choices(nodes, k=nb_labels)
+
+    for idx, (src, tar) in enumerate(product(sources, targets)):
+        labels.add_edge(src, tar)
+        scores = torch.softmax(
+            torch.rand(1 + nb_scores), dim=-1)[..., :-1]
+        labels[src][tar][idx] = scores
+
+    return labels
+
+
 class TestRelationCache:
     """
     Tests for RelationCache class
@@ -134,7 +154,7 @@ class TestRelationCache:
         if arr:
             datas = {idx: torch.rand(data_dim) for idx in set().union(*arr)}
             return RelationCache[int, int](
-                relations, scoring, algebra.comp, datas, *arr)
+                relations, scoring, algebra.comp, datas, arr)
 
         return RelationCache[int, int](relations, scoring, algebra.comp, {})
 
@@ -211,15 +231,7 @@ class TestRelationCache:
             relations, scoring, algebra, nb_features, arrow)
 
         # create label graph
-        labels = DirectedGraph[int]()
-        sources = random.choices(arrow.nodes, k=nb_labels)
-        targets = random.choices(arrow.nodes, k=nb_labels)
-
-        for idx, (src, tar) in enumerate(product(sources, targets)):
-            labels.add_edge(src, tar)
-            scores = torch.softmax(
-                torch.rand(1 + scoring.nb_scores), dim=-1)[..., :-1]
-            labels[src][tar][idx] = scores
+        labels = get_labels(arrow, scoring.nb_scores, nb_labels)
 
         # match label graph against cache
         matches = cache.match(labels)
@@ -260,8 +272,33 @@ class TestRelationCache:
 
 class TestDecisionCatModel:
     """ Tests for DecisionCatModel class"""
-    pass
+    @staticmethod
+    def get_model(
+            relations: Dict[int, RelationModel],
+            scoring: ScoringModel, algebra: Algebra) -> DecisionCatModel:
+        """ Get a model using test relation models and scoring"""
+        return DecisionCatModel(relations, scoring, algebra)
 
+    @staticmethod
+    def test_cost(
+            arrow: CompositeArrow[int, int],
+            relations: Dict[int, RelationModel], scoring: ScoringModel,
+            algebra: Algebra,
+            nb_features: int, nb_labels: int) -> torch.Tensor:
+        """
+        Test cost function of decision cat model
+        """
+        # create model
+        model = TestDecisionCatModel.get_model(relations, scoring, algebra)
+
+        # generate datapoints for arrow
+        datas = {node: torch.rand(nb_features) for node in arrow}
+
+        # generate labels
+        labels = get_labels(arrow, scoring.nb_scores, nb_labels)
+
+        cost = model.cost(datas, [arrow], labels)
+        assert cost >= 0
 
 class TestTrainableDecisionCatModel:
     """ Tests for TrainableDecisionCatModel class"""
