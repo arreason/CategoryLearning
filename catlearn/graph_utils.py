@@ -781,23 +781,28 @@ class CompositionGraph(Generic[NodeType, ArrowType, AlgebraType], abc.Mapping): 
         """
         get an iterator over all arrows starting at src and ending at tar.
         If source or arrow is None, will loop through all possible sources
-        and arrows
+        and arrows.
+        If no existing arrows (or src/tar not in underlying graph), returns
+        an empty iterator
         """
         if src is None and tar is None:
             # iterate over all edges of graph in this case
             return iter(self)
-        if src is not None and tar is not None:
+        if (
+            src is not None and tar is not None
+                and self.graph.has_edge(src, tar)):
             # iterate over all edges from src to tar
             return (arr.suspend(src, tar) for arr in self.graph[src][tar])
-        if src is not None:
+        if src is not None and tar is None and src in self.graph:
             # iterate over all edges starting at src
-            return chain(
-                *(self.arrows(src, node) for node in self.graph[src]))
+            return chain(*(
+                self.arrows(src, node) for node in self.graph[src]))
+        if src is None and tar is not None and tar in self.graph:
+            # iterate over all edges ending at tar
+            return chain(*(
+                self.arrows(node, tar) for node in self.graph.op[tar]))
 
-        # case where tar is not None but src is None
-        # iterate over all edges ending at tar
-        return chain(*(
-            self.arrows(node, tar) for node in self.graph.op[tar]))
+        return iter(())
 
     def __iter__(self) -> Iterator[CompositeArrow]:
         """
