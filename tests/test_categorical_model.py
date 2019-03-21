@@ -3,31 +3,35 @@
 """
 Tests for the categorical_model file.
 """
-from typing import Any, Dict, Optional, Iterable
+from typing import Any, Dict, Optional, Iterable, List
 from functools import reduce
 from itertools import combinations, product
 from math import inf
 import random
+from shutil import copyfile, copytree
 
 import torch
 from torch import nn
 
 import pytest
 
-from catlearn.tensor_utils import subproba_kl_div
+from catlearn.tensor_utils import subproba_kl_div, DEFAULT_EPSILON
+from catlearn.graph_utils import (
+    DirectedGraph, CompositeArrow)
 from catlearn.categorical_model import (
-    DEFAULT_EPSILON, RelationModel, ScoringModel, CompositeArrow,
-    DirectedGraph, RelationCache, DecisionCatModel, TrainableDecisionCatModel)
+    RelationModel, ScoringModel, RelationCache,
+    DecisionCatModel, TrainableDecisionCatModel)
 from catlearn.algebra_models import (
     Algebra, VectAlgebra, MatrixAlgebra, AffineAlgebra)
-from catlearn.causal_generation_utils import (
-    CausalGenerator, CausalGraphBatch,
-    CausalDatasetFromGraph, generate_dataset)
 
 from tests.test_tools import pytest_generate_tests
 # List of algebras to verify
 # Automagic, adding an algebra will get tested right away
 CLASSES_TO_TEST = {VectAlgebra, MatrixAlgebra, AffineAlgebra}
+
+
+# path to the data of the generators used for synthetic datasets
+DATA_DIR = "./tests/test_categorical_model/"
 
 
 @pytest.fixture(params=[2, 8])
@@ -36,19 +40,19 @@ def nb_features(request: Any) -> int:
     return request.param
 
 
-@pytest.fixture(params=[1, 3, 9])
+@pytest.fixture(params=[1, 3])
 def nb_scores(request: Any) -> int:
     """ Score vector dimension"""
     return request.param
 
 
-@pytest.fixture(params=[1, 2, 3])
+@pytest.fixture(params=[1, 3])
 def nb_relations(request: Any) -> int:
     """ number of relations in the model"""
     return request.param
 
 
-@pytest.fixture(params=[2, 5])
+@pytest.fixture(params=[10])
 def nb_labels(request: Any) -> int:
     """ number of randomly chosen labels under which to match"""
     return request.param
@@ -76,10 +80,14 @@ def relations(
         """ Fake relations """
         def __init__(self, nb_features: int, algebra: Algebra) -> None:
             self.linear = nn.Linear(2 * nb_features, algebra.flatdim)
+            self.parameters = self.linear.parameters
 
         def __call__(self, x: torch.tensor, y: torch.tensor) -> torch.Tensor:
             """ Compute x R y """
             return self.linear(torch.cat((x, y), -1))
+
+        def parameters(self):
+            return self.linear.parameters()
 
     return {
         idx: CustomRelation(nb_features, algebra)
@@ -107,10 +115,13 @@ def scoring(
             cat_input = torch.cat((src, dst, rel), -1)
             return self.softmax(self.linear(cat_input))[..., :-1]
 
+        def parameters(self):
+            return self.linear.parameters()
+
     return CustomScore(nb_features, nb_scores, algebra)
 
 
-@pytest.fixture(params=[1, 3, 5, 11])
+@pytest.fixture(params=[1, 7])
 def arrow(request: Any, nb_relations: int) -> CompositeArrow[int, int]:
     """Composite arrow for tests"""
     return CompositeArrow(
@@ -135,6 +146,20 @@ def get_labels(
         labels[src][tar][idx] = scores
 
     return labels
+
+
+def get_model(
+        relations: Dict[int, RelationModel],
+        scoring: ScoringModel, algebra: Algebra,
+        trainable: False) -> DecisionCatModel:
+    """
+    Get a categorical model using test relation models and scoring
+    If trainable is set to True, returns a trainable decision model.
+    """
+    if trainable:
+        return TrainableDecisionCatModel(
+            relations, scoring, algebra, torch.optim.SGD, lr=0.1)
+    return DecisionCatModel(relations, scoring, algebra)
 
 
 class TestRelationCache:
@@ -273,23 +298,16 @@ class TestRelationCache:
 class TestDecisionCatModel:
     """ Tests for DecisionCatModel class"""
     @staticmethod
-    def get_model(
-            relations: Dict[int, RelationModel],
-            scoring: ScoringModel, algebra: Algebra) -> DecisionCatModel:
-        """ Get a model using test relation models and scoring"""
-        return DecisionCatModel(relations, scoring, algebra)
-
-    @staticmethod
     def test_cost(
             arrow: CompositeArrow[int, int],
             relations: Dict[int, RelationModel], scoring: ScoringModel,
             algebra: Algebra,
-            nb_features: int, nb_labels: int) -> torch.Tensor:
+            nb_features: int, nb_labels: int) -> None:
         """
         Test cost function of decision cat model
         """
         # create model
-        model = TestDecisionCatModel.get_model(relations, scoring, algebra)
+        model = get_model(relations, scoring, algebra, trainable=False)
 
         # generate datapoints for arrow
         datas = {node: torch.rand(nb_features) for node in arrow}
@@ -297,9 +315,45 @@ class TestDecisionCatModel:
         # generate labels
         labels = get_labels(arrow, scoring.nb_scores, nb_labels)
 
+        # compute cost. we want to verify all goes smoothly and
+        # the result is a positive finite real number as intended
         cost = model.cost(datas, [arrow], labels)
+        assert torch.isfinite(cost)
         assert cost >= 0
+
 
 class TestTrainableDecisionCatModel:
     """ Tests for TrainableDecisionCatModel class"""
-    pass
+    params: Dict[str, List[Any]] = {
+        "test_train": [dict(nb_steps=20)]}
+
+    @staticmethod
+    def test_train(
+            arrow: CompositeArrow[int, int],
+            relations: Dict[int, RelationModel], scoring: ScoringModel,
+            algebra: Algebra,
+            nb_features: int, nb_labels: int,
+            nb_steps: int) -> None:
+        """
+        Test training, verifying that overerall cost on a batch lowers
+        during training when using same data
+        """
+        # get model
+        model = get_model(relations, scoring, algebra, trainable=True)
+
+        # generate datapoints for arrow
+        datas = {node: torch.rand(nb_features) for node in arrow}
+
+        # generate labels
+        labels = get_labels(arrow, scoring.nb_scores, nb_labels)
+
+        # compute cost
+        initial_cost = model.cost(datas, [arrow], labels).item()
+
+        # let's train for severam steps
+        for _ in range(nb_steps):
+            model.train(datas, [arrow], labels, step=True)
+
+        final_cost = model.cost(datas, [arrow], labels).item()
+
+        assert final_cost <= initial_cost

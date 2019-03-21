@@ -443,12 +443,26 @@ class TrainableDecisionCatModel(DecisionCatModel):
         for rel in self.relations.values():
             rel.unfreeze()
 
+    @property
+    def total_cost(self) -> torch.tensor:
+        """
+        Get total cost currently stored
+        """
+        return self._cost
+
+    def reset(self) -> None:
+        """
+        reset gradient values and total cost stored
+        """
+        self._optimizer.zero_grad()
+        self._cost = torch.zeros(())
+
     def train(
             self,
             data_points: Mapping[NodeType, torch.Tensor],
             relations: Iterable[CompositeArrow[NodeType, ArrowType]],
             labels: DirectedGraph[NodeType],
-            step: bool = True) -> torch.Tensor:
+            step: bool = True) -> None:
         """
         perform one training step on a batch of tuples
         """
@@ -463,7 +477,4 @@ class TrainableDecisionCatModel(DecisionCatModel):
             self._optimizer.step()
 
             # reset gradient and total costs
-            self._optimizer.zero_grad()
-            self._cost = torch.zeros(())
-
-        return self._cost
+            self.reset()
