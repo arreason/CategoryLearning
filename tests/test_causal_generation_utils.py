@@ -6,7 +6,7 @@ from typing import (
     Any, Callable, Dict, Tuple, List, Sequence)
 from itertools import product
 import random
-from shutil import copyfile
+from shutil import copyfile, copytree
 
 import torch
 import numpy as np
@@ -33,6 +33,14 @@ def nb_nodes(request: Any) -> int:
 def batch_shape(request: Any) -> int:
     """
     batch shape for dataset and databatch objects
+    """
+    return request.param
+
+
+@pytest.fixture(params=[1, 3, 10])
+def dim(request: Any) -> int:
+    """
+    dimension of stored datas
     """
     return request.param
 
@@ -77,11 +85,12 @@ class TestCausalGenerator:
                 generator = CausalGenerator(graph, generators_dict)
 
     @staticmethod
-    def test_dump(filename: str, tmpdir) -> None:
+    def test_dump(filename: str, dim: int, tmpdir) -> None:
         """
         Test that dumping works as intended
         """
         generator = CausalGenerator.load(DATA_DIR + filename)
+        np.save(DATA_DIR + filename + "_utils/dim.npy", dim)
 
         savepath = tmpdir.join("dump_" + filename)
 
@@ -89,6 +98,7 @@ class TestCausalGenerator:
         generator.dump(savepath)
         copyfile(DATA_DIR + filename + "_generator.py",
                  savepath + "_generator.py")
+        copytree(DATA_DIR + filename + "_utils", savepath + "_utils")
         reloaded_generator = CausalGenerator.load(savepath)
 
         assert generator.graph == reloaded_generator.graph
@@ -102,7 +112,7 @@ class TestCausalDatasetFromGraph:
     params: Dict[str, List[Any]] = {
         "test_generate": [
             dict(generator_name="_test",
-                 copy_utils=False)
+                 copy_utils=True)
         ],
         "test_batch_shape": [
             dict(generator_name="_test")
@@ -111,7 +121,7 @@ class TestCausalDatasetFromGraph:
 
     @staticmethod
     def test_generate(
-            generator_name: str, batch_shape: Sequence[int],
+            generator_name: str, batch_shape: Sequence[int], dim: int,
             copy_utils: bool, tmpdir: Any) -> None:
         """
         test generation of a dataset object given its save directory.
@@ -122,6 +132,7 @@ class TestCausalDatasetFromGraph:
 
         data_path = tmpdir.join("test_generate")
         generator_path = DATA_DIR + generator_name
+        np.save(generator_path + "_utils/dim.npy", dim)
 
         generator = CausalGenerator.load(generator_path)
         causal_dataset = generate_dataset(
@@ -133,13 +144,14 @@ class TestCausalDatasetFromGraph:
 
     @staticmethod
     def test_batch_shape(
-            generator_name: str, batch_shape: Sequence[int],
+            generator_name: str, batch_shape: Sequence[int], dim: int,
             tmpdir: Any) -> None:
         """
         tests the batch shape of stored data
         """
         data_path = tmpdir.join("test_batch")
         generator_path = DATA_DIR + generator_name
+        np.save(generator_path + "_utils/dim.npy", dim)
 
         # generate dataset
         causal_dataset = generate_dataset(
@@ -152,7 +164,7 @@ class TestCausalDatasetFromGraph:
         node_path = data_path.join(node)
         data = torch.load(str(node_path))
 
-        assert tuple(data.shape) == tuple(batch_shape)
+        assert tuple(data.shape) == tuple(batch_shape) + (dim,)
 
 
 class TestCausalGraphBatch:
