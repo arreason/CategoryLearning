@@ -532,7 +532,7 @@ def generate_dataset(
     if copy_utils:
         try:
             shutil.copytree(
-                f"{causal_generator}_utils", batch_path.joinpath("utils"))
+                f"{generator_filename}_utils", batch_path.joinpath("utils"))
         except IOError:
             raise Warning("Could not copy utils folder.")
 

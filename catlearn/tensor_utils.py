@@ -13,7 +13,7 @@ import torch
 from torch.nn.functional import kl_div
 
 # default precision of computations
-DEFAULT_EPSILON = 1e-7
+DEFAULT_EPSILON = 1e-6
 
 
 def repeat_tensor(

@@ -393,8 +393,8 @@ class GraphRandomFactory:
         assert 0. <= pruning_factor <= 1., (
             "pruning factor should be between 0. and 1.")
         assert len(weights) == len(__class__.OPS), (  # type: ignore
-            "Weights sequence should be of length 4, for or, and, add, mul"
-            "operations respectively")
+            "Weights sequence should be of length 5, for"
+            " or, and, add, mul, matmul operations respectively")
         assert 0 <= len(initial_graphs) <= nb_graphs, (
             "number of initializer "
             "graphs should be at most nb_graphs: {nb_graphs}")
@@ -491,6 +491,34 @@ class GraphRandomFactory:
             for (_, op), args in zip(ops, operands))
 
         return self._graphs
+
+
+def generate_random_graph(
+        nb_steps: int, random_generator: random.Random,
+        *args, **kwargs):
+    """
+    Generate a random graph using a random factory.
+    Arguments:
+        - nb_steps: the number of steps used for the generation of the factory
+        - random_generator: the pseudo-random generator to be used
+        - *args, **kwargs: arguments passed to the factory. The following
+            default values will be used:
+                pruning_factor: 0.15
+                weights: 0.15, 0.15, 0.15, 0.15, 0.15
+                nb_graphs: 5
+    """
+    # create factory
+    factory = GraphRandomFactory(
+        [0.15, 0.15, 0.15, 0.15, 0.14], 5, 0.15, random_generator,
+        *args, **kwargs)
+
+    # go throuth generation steps
+    for _ in range(nb_steps):
+        next(factory)
+
+    # return a randomly chosen graph in the factory's memory
+    idx = random_generator.randint(0, factory.nb_graphs - 1)
+    return factory.graphs[idx]
 
 
 class CompositeArrow(Generic[NodeType, ArrowType], abc.Sequence):  # pylint: disable=unsubscriptable-object
