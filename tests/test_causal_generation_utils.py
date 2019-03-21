@@ -37,14 +37,6 @@ def batch_shape(request: Any) -> int:
     return request.param
 
 
-@pytest.fixture(params=[1, 3, 10])
-def dim(request: Any) -> int:
-    """
-    dimension of stored datas
-    """
-    return request.param
-
-
 class TestCausalGenerator:
     """
     Unit tests for Causal generator class
@@ -85,12 +77,11 @@ class TestCausalGenerator:
                 generator = CausalGenerator(graph, generators_dict)
 
     @staticmethod
-    def test_dump(filename: str, dim: int, tmpdir) -> None:
+    def test_dump(filename: str, tmpdir) -> None:
         """
         Test that dumping works as intended
         """
         generator = CausalGenerator.load(DATA_DIR + filename)
-        np.save(DATA_DIR + filename + "_utils/dim.npy", dim)
 
         savepath = tmpdir.join("dump_" + filename)
 
@@ -98,7 +89,7 @@ class TestCausalGenerator:
         generator.dump(savepath)
         copyfile(DATA_DIR + filename + "_generator.py",
                  savepath + "_generator.py")
-        copytree(DATA_DIR + filename + "_utils", savepath + "_utils")
+        copytree(DATA_DIR + filename + "_utils/", savepath + "_utils/")
         reloaded_generator = CausalGenerator.load(savepath)
 
         assert generator.graph == reloaded_generator.graph
@@ -121,7 +112,7 @@ class TestCausalDatasetFromGraph:
 
     @staticmethod
     def test_generate(
-            generator_name: str, batch_shape: Sequence[int], dim: int,
+            generator_name: str, batch_shape: Sequence[int],
             copy_utils: bool, tmpdir: Any) -> None:
         """
         test generation of a dataset object given its save directory.
@@ -132,7 +123,6 @@ class TestCausalDatasetFromGraph:
 
         data_path = tmpdir.join("test_generate")
         generator_path = DATA_DIR + generator_name
-        np.save(generator_path + "_utils/dim.npy", dim)
 
         generator = CausalGenerator.load(generator_path)
         causal_dataset = generate_dataset(
@@ -144,14 +134,14 @@ class TestCausalDatasetFromGraph:
 
     @staticmethod
     def test_batch_shape(
-            generator_name: str, batch_shape: Sequence[int], dim: int,
+            generator_name: str, batch_shape: Sequence[int],
             tmpdir: Any) -> None:
         """
         tests the batch shape of stored data
         """
         data_path = tmpdir.join("test_batch")
         generator_path = DATA_DIR + generator_name
-        np.save(generator_path + "_utils/dim.npy", dim)
+        dim = np.load(generator_path + "_utils/dim.npy")
 
         # generate dataset
         causal_dataset = generate_dataset(
