@@ -18,6 +18,9 @@ from catlearn.causal_generation_utils import (
 from tests.test_tools import pytest_generate_tests
 
 
+DATA_DIR = "./tests/test_causal_generation_utils/"
+
+
 @pytest.fixture(params=[1, 2, 3])
 def nb_nodes(request: Any) -> int:
     """
@@ -78,13 +81,13 @@ class TestCausalGenerator:
         """
         Test that dumping works as intended
         """
-        generator = CausalGenerator.load("./tests/" + filename)
+        generator = CausalGenerator.load(DATA_DIR + filename)
 
         savepath = tmpdir.join("dump_" + filename)
 
         # dump and reload generator
         generator.dump(savepath)
-        copyfile("./tests/" + filename + "_generator.py",
+        copyfile(DATA_DIR + filename + "_generator.py",
                  savepath + "_generator.py")
         reloaded_generator = CausalGenerator.load(savepath)
 
@@ -118,7 +121,7 @@ class TestCausalDatasetFromGraph:
         # load generator
 
         data_path = tmpdir.join("test_generate")
-        generator_path = "./tests/" + generator_name
+        generator_path = DATA_DIR + generator_name
 
         generator = CausalGenerator.load(generator_path)
         causal_dataset = generate_dataset(
@@ -136,7 +139,7 @@ class TestCausalDatasetFromGraph:
         tests the batch shape of stored data
         """
         data_path = tmpdir.join("test_batch")
-        generator_path = "./tests/" + generator_name
+        generator_path = DATA_DIR + generator_name
 
         # generate dataset
         causal_dataset = generate_dataset(
@@ -171,7 +174,7 @@ class TestCausalGraphBatch:
         """
 
         data_path = tmpdir.join("test_adj")
-        generator_path = "./tests/" + generator_name
+        generator_path = DATA_DIR + generator_name
 
         # generate dataset
         causal_dataset = generate_dataset(
