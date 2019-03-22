@@ -190,3 +190,30 @@ def subproba_kl_div(
 
     # sum all components of kl and return
     return kl_direct.sum(dim=dim, keepdim=keepdim) + kl_complement
+
+
+def remap_subproba(
+        to_remap: torch.Tensor, reference: torch.Tensor,
+        dim: int = -1) -> torch.Tensor:
+    """
+    remap a subprobability vector to an other subprobability vector, making
+    sure that remapping the reference yields a vector of total proba 1.
+    """
+    # compute total proba of both vectors
+    to_remap_proba = to_remap.sum(dim=dim, keepdim=True)
+    reference_proba = reference.sum(dim=dim, keepdim=True)
+
+    # compute square roots, to use as vectors in euclidian vector space
+    to_remap_sqrt = to_remap.sqrt()
+    reference_sqrt = reference.sqrt()
+
+    # inner product of sqrt vectors and total correction factor
+    inner_product = torch.sum(
+        to_remap_sqrt * reference_sqrt, dim=dim, keepdim=True)
+    compl_proba_sqrt = torch.sqrt(
+        (1. - to_remap_proba) * (1. - reference_proba))
+    corr_factor = (
+        inner_product * (1. - 1./reference_proba.sqrt())
+        + compl_proba_sqrt)/reference_proba.sqrt()
+
+    return (to_remap_sqrt + corr_factor * reference_sqrt) ** 2
