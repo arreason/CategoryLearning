@@ -6,6 +6,7 @@ pytest-cov
 pytest-rerunfailures
 pylint
 scikit-learn
+networkx
 #pytorch -> requires manual operation for now. Expected version 1.0.X
 #torchvision §> can be pip installed once torch is
 
