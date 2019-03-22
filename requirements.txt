@@ -1,0 +1,17 @@
+# Strictly required
+numpy
+scipy>=1.1.0
+pytest
+pytest-cov
+pytest-rerunfailures
+pylint
+scikit-learn
+#pytorch -> requires manual operation for now. Expected version 1.0.X
+#torchvision §> can be pip installed once torch is
+
+# Additional
+ipython
+jupyter
+pandas
+plotly
+pyyaml
