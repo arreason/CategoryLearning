@@ -512,7 +512,7 @@ def generate_random_graph(
         [0.15, 0.15, 0.15, 0.15, 0.14], 5, 0.15, random_generator,
         *args, **kwargs)
 
-    # go throuth generation steps
+    # go through generation steps
     for _ in range(nb_steps):
         next(factory)  # type: ignore
 
@@ -535,7 +535,7 @@ class CompositeArrow(Generic[NodeType, ArrowType], abc.Sequence):  # pylint: dis
             self, nodes: Union[NodeType, Iterable[NodeType]],
             arrows: Optional[Iterable[ArrowType]] = None) -> None:
         """
-        initialize a new composite arrow from nodes and arrow labels data
+        Initialize a new composite arrow from nodes and arrow labels data
         """
         super().__init__()
 
@@ -562,7 +562,7 @@ class CompositeArrow(Generic[NodeType, ArrowType], abc.Sequence):  # pylint: dis
             self, source: ArrowType, target: ArrowType
         ) -> CompositeArrow[ArrowType, NodeType]:
         """
-        return an arrow whose derived is given arrow, with provided source
+        Return an arrow whose derived is given arrow, with provided source
         and target
         """
         return CompositeArrow[ArrowType, NodeType](
@@ -639,7 +639,7 @@ class CompositeArrow(Generic[NodeType, ArrowType], abc.Sequence):  # pylint: dis
 
     def __eq__(self, arrow: CompositeArrow[NodeType, ArrowType]) -> bool:  # type: ignore
         """
-        test wether two composite arrows are equals, i.e:
+        Test wether two composite arrows are equals, i.e:
             - they have the same nodes in the same order
             - they have the same arrows in the same order
         """
@@ -656,7 +656,7 @@ class CompositeArrow(Generic[NodeType, ArrowType], abc.Sequence):  # pylint: dis
             self, arrow: CompositeArrow[NodeType, ArrowType],
             overlap: int) -> CompositeArrow[NodeType, ArrowType]:
         """
-        return composite with n overlapping arrows in the middle
+        Return composite with n overlapping arrows in the middle
         if n negative, or all overlapping from n-th position of first arrow
         if n is positive
         """
@@ -679,7 +679,7 @@ class CompositeArrow(Generic[NodeType, ArrowType], abc.Sequence):  # pylint: dis
             self, arrow: CompositeArrow[NodeType, ArrowType]
         ) -> CompositeArrow[NodeType, ArrowType]:
         """
-        compose 2 arrows together. The last node of the first must be the same
+        Compose 2 arrows together. The last node of the first must be the same
         as the first node of the second.
         """
         if not self[-1] == arrow[0]:  # type: ignore
@@ -695,7 +695,7 @@ class CompositeArrow(Generic[NodeType, ArrowType], abc.Sequence):  # pylint: dis
             self, arrow: CompositeArrow[NodeType, ArrowType]
         ) -> CompositeArrow[NodeType, ArrowType]:
         """
-        extend 2 composites which match on:
+        Extend 2 composites which match on:
             - the first composite with its first arrow removed
             - the second composite with its last arrow removed
         """
@@ -738,7 +738,7 @@ class CompositionGraph(Generic[NodeType, ArrowType, AlgebraType], abc.Mapping): 
             arrows: Iterable[
                 CompositeArrow[NodeType, ArrowType]] = iter(())) -> None:
         """
-        initialize a new composition graph.
+        Initialize a new composition graph.
         """
         super().__init__()
         self._graph = DirectedGraph[NodeType]()
@@ -808,10 +808,10 @@ class CompositionGraph(Generic[NodeType, ArrowType, AlgebraType], abc.Mapping): 
             tar: Optional[NodeType] = None
         ) -> Iterator[CompositeArrow[NodeType, ArrowType]]:
         """
-        get an iterator over all arrows starting at src and ending at tar.
-        If source or arrow is None, will loop through all possible sources
+        Get an iterator over all arrows starting at src and ending at tar.
+        If source or tar is None, will loop through all possible sources
         and arrows.
-        If no existing arrows (or src/tar not in underlying graph), returns
+        If no existing arrows (or src/tar not in the underlying graph), returns
         an empty iterator
         """
         if src is None and tar is None:
@@ -835,20 +835,20 @@ class CompositionGraph(Generic[NodeType, ArrowType, AlgebraType], abc.Mapping): 
 
     def __iter__(self) -> Iterator[CompositeArrow]:
         """
-        return an iterator over all composite arrows of the structure
+        Return an iterator over all composite arrows of the structure
         """
         return chain(*(self.arrows(*edge) for edge in self.graph.edges))
 
     def __len__(self) -> int:
         """
-        return the number of composite arrows in the structure
+        Return the number of composite arrows in the structure
         """
         return sum(1 for _ in iter(self))
 
     def __getitem__(
             self, arrow: CompositeArrow[NodeType, ArrowType]) -> AlgebraType:
         """
-        get value associated to given arrow
+        Get value associated to given arrow
         """
         return self.graph[arrow[0]][arrow[-1]][arrow.derive()]
 

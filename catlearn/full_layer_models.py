@@ -10,6 +10,8 @@ from typing import Any, Callable, Sequence, Tuple, Iterable
 import torch
 import torch.nn as nn
 
+from catlearn.tensor_utils import Tsor
+
 
 class ConstantModel(nn.Module):
     """ Encapsulate a non-parametrized transform """
@@ -28,7 +30,7 @@ class ConstantModel(nn.Module):
         """
         return self.name
 
-    def forward(self, *inputs: torch.Tensor) -> torch.Tensor:
+    def forward(self, *inputs: Tsor) -> Tsor:
         """ Forward override """
         assert len(inputs) == 1
         return self._forward(inputs[0])
@@ -112,7 +114,7 @@ class LayeredModel(nn.Module):
         """
         return lambda: self.layers.parameters()
 
-    def forward(self, *inputs: torch.Tensor) -> torch.Tensor:
+    def forward(self, *inputs: Tsor) -> Tsor:
         """ Forward pass of Layered Model """
         assert len(inputs) == 1
         input_batch = inputs[0]
@@ -231,14 +233,14 @@ class FullPerceptron(LayeredModel):
         last_layer = nn.Linear(all_units[-2], all_units[-1], bias=True)
         return chain(*internals, [last_layer])
 
-    def _view_input(self, batch_input: torch.Tensor) -> torch.Tensor:
+    def _view_input(self, batch_input: Tsor) -> Tsor:
         """
         A function to reshape batch for input in the underlying
         perceptron model, by flattening the input shape
         inputs:
-            batch_input: torch.Tensor, last dims are self.input_shape
+            batch_input: Tsor, last dims are self.input_shape
         outputs:
-            torch.Tensor, view of input with last self.input_ndim
+            Tsor, view of input with last self.input_ndim
             flattened to a singledimension
         """
         assert batch_input.ndimension() >= self.input_ndim
@@ -247,14 +249,14 @@ class FullPerceptron(LayeredModel):
         batch_shape = batch_input.shape[:-self.input_ndim]
         return batch_input.view(batch_shape + (-1,))
 
-    def _view_output(self, batch_output: torch.Tensor) -> torch.Tensor:
+    def _view_output(self, batch_output: Tsor) -> Tsor:
         """
         A function to reshape batch out of the underlying perceptron model
         for output, respecting the instance's output_shape
         inputs:
-            batch_input: torch.Tensor, last dim is self.output_numel
+            batch_input: Tsor, last dim is self.output_numel
         outputs:
-            torch.Tensor, last dim is recast as self.output_shape
+            Tsor, last dim is recast as self.output_shape
         """
         assert batch_output.ndimension() >= 1
         assert batch_output.shape[-1] == self.output_numel
@@ -307,7 +309,7 @@ class FullPerceptronWithRandomState(LayeredModel):
                         deterministic_model.children())
         LayeredModel.__init__(self, input_shape, output_shape, op_list)
 
-    def draw_state(self, batch_shape: Tuple[int, ...]) -> torch.Tensor:
+    def draw_state(self, batch_shape: Tuple[int, ...]) -> Tsor:
         """
         draw a batch of state vectors for input in the underlying perceptron
         model
@@ -316,7 +318,7 @@ class FullPerceptronWithRandomState(LayeredModel):
         """
         return self.random(batch_shape + (self.num_random,))
 
-    def augment_input(self, batch_input: torch.Tensor) -> torch.Tensor:
+    def augment_input(self, batch_input: Tsor) -> Tsor:
         """
         flatten inputs in the batch and concatenate it with a randomly drawn
         state

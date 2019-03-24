@@ -15,7 +15,7 @@ from torch import nn
 
 import pytest
 
-from catlearn.tensor_utils import subproba_kl_div, DEFAULT_EPSILON
+from catlearn.tensor_utils import subproba_kl_div, DEFAULT_EPSILON, Tsor
 from catlearn.graph_utils import (
     DirectedGraph, CompositeArrow)
 from catlearn.categorical_model import (
@@ -88,7 +88,7 @@ def relations(
         def parameters(self) -> Callable[[], Iterable[Any]]:
             return self.linear.parameters
 
-        def __call__(self, x: torch.tensor, y: torch.tensor) -> torch.Tensor:
+        def __call__(self, x: Tsor, y: Tsor) -> Tsor:
             """ Compute x R y """
             return self.linear(torch.cat((x, y), -1))
 
@@ -115,9 +115,9 @@ def scoring(
 
 
         def __call__(self,
-                     src: torch.Tensor,
-                     dst: torch.Tensor,
-                     rel: torch.Tensor) -> torch.Tensor:
+                     src: Tsor,
+                     dst: Tsor,
+                     rel: Tsor) -> Tsor:
             """ Compute S(src, dst, rel) """
             cat_input = torch.cat((src, dst, rel), -1)
             return self.softmax(self.linear(cat_input))[..., :-1]

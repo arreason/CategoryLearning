@@ -13,13 +13,14 @@ from typing import (
     Any, Callable, Iterable, Mapping, Generic, TypeVar)
 
 import torch
+from torch.optim import Optimizer
 
 from catlearn.tensor_utils import (
-    DEFAULT_EPSILON,
+    DEFAULT_EPSILON, Tsor,
     subproba_kl_div,
     remap_subproba)
 from catlearn.graph_utils import (
-    CompositeArrow, CompositionGraph, DirectedGraph)
+    CompositeArrow, CompositionGraph, DirectedGraph, NodeType, ArrowType)
 from catlearn.algebra_models import Algebra
 
 
@@ -40,39 +41,38 @@ class AbstractModel:
 
 class RelationModel(AbstractModel):
     def __call__(self,
-                 src: torch.Tensor,
-                 dst: torch.Tensor) -> torch.Tensor:
+                 src: Tsor,
+                 dst: Tsor) -> Tsor:
         raise NotImplementedError()
 
 
 class ScoringModel(AbstractModel):
     def __call__(self,
-                 src: torch.Tensor,
-                 dst: torch.Tensor,
-                 rel: torch.Tensor) -> torch.Tensor:
+                 src: Tsor,
+                 dst: Tsor,
+                 rel: Tsor) -> Tsor:
         raise NotImplementedError()
 # pylint: enable=missing-docstring
 
 
-NodeType = TypeVar("NodeType")
-ArrowType = TypeVar("ArrowType")
+# Some convenient type aliases
+GeneratorMapping = Mapping[ArrowType, Callable[[Tsor, Tsor], Tsor]]
+Scorer = Callable[[Tsor, Tsor, Tsor], Tsor]
+BinaryOp = Callable[[Tsor, Tsor], Tsor]
 
 
 class RelationCache(
         Generic[NodeType, ArrowType],  # pylint: disable=unsubscriptable-object
-        CompositionGraph[NodeType, ArrowType, torch.Tensor]):
+        CompositionGraph[NodeType, ArrowType, Tsor]):
     """
     A cache to keep the values of all relations
     """
     def __init__(
             self,
-            generators: Mapping[
-                ArrowType, Callable[
-                    [torch.tensor, torch.tensor], torch.Tensor]],
-            scorer: Callable[
-                [torch.Tensor, torch.Tensor, torch.Tensor], torch.Tensor],
-            comp: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
-            datas: Mapping[NodeType, torch.Tensor],
+            generators: GeneratorMapping,
+            scorer: Scorer,
+            comp: BinaryOp,
+            datas: Mapping[NodeType, Tsor],
             arrows: Iterable[CompositeArrow[NodeType, ArrowType]],
             epsilon: float = DEFAULT_EPSILON) -> None:
         """
@@ -102,10 +102,10 @@ class RelationCache(
 
         def rel_comp(
                 cache, arrow: CompositeArrow[NodeType, ArrowType]
-            ) -> torch.Tensor:
+            ) -> Tuple[Tsor, Tsor]:
             """
-            compute the composite of all order 1 arrows, and account for
-            causality cost
+            compute the composite of all the order 1 arrow making up the given
+            arrow, and account for causality cost
             """
             # case of length 1
             if len(arrow) == 1:
@@ -158,7 +158,7 @@ class RelationCache(
 
     def data(
             self, arrow: CompositeArrow[NodeType, ArrowType]
-        ) -> torch.Tensor:
+        ) -> Tsor:
         """
         Takes as argument a composite arrow.
         Returns:
@@ -174,20 +174,19 @@ class RelationCache(
 
     def __getitem__(
             self, arrow: CompositeArrow[NodeType, ArrowType]
-        ) -> torch.Tensor:
+        ) -> Tsor:
         """
         Returns the value associated to an arrow.
-        If the arrow has length 0 (contains only a node):
-            returns 0.
+        If the arrow has length 0, raises a ValueError
         If the arrow has length >= 1:
-            returns the score vector of the relation
+            returns the score vector of the relation.
         """
         if not arrow:
             raise ValueError("Cannot get the score of an arrow of length 0")
         else:
             return super().__getitem__(arrow)[0]
 
-    def __setitem__(self, node: NodeType, data_point: torch.Tensor) -> None:
+    def __setitem__(self, node: NodeType, data_point: Tsor) -> None:
         """
         set value of a new data point.
         Note: cannot set the value of an arrow, as these are computed using
@@ -213,10 +212,10 @@ class RelationCache(
         """
         super().flush()
         self._datas = {}
-        self._causality_cost = 0.
+        self._causality_cost = torch.zeros(())
         self._nb_compositions = 0
 
-    def match(self, labels: DirectedGraph[NodeType]) -> torch.Tensor:
+    def match(self, labels: DirectedGraph[NodeType]) -> Tsor:
         """
         Match the composition graph with a graph of labels. For each label
         vector, get the best match in the graph. if No match is found, set to
@@ -303,9 +302,6 @@ class DecisionCatModel:
         self._algebra_model = algebra_model
         self.epsilon = epsilon
 
-        # to store the number of inputs taken into account for both scores
-        self._cost = torch.zeros(())
-
     @property
     def algebra(self) -> Algebra:
         """
@@ -321,8 +317,8 @@ class DecisionCatModel:
         return MappingProxyType(self._relation_models)
 
     def score(
-            self, source: torch.Tensor, target: torch.Tensor,
-            relation: torch.Tensor) -> torch.Tensor:
+            self, source: Tsor, target: Tsor,
+            relation: Tsor) -> Tsor:
         """
         compute score of a relation batch, making sure that the score of
         an identity sums to 1
@@ -337,9 +333,9 @@ class DecisionCatModel:
         return remap_subproba(main_score, reference)
 
     def generate_cache(
-            self, data_points: Mapping[NodeType, torch.Tensor],
+            self, data_points: Mapping[NodeType, Tsor],
             relations: Iterable[CompositeArrow[NodeType, ArrowType]]
-        ) -> torch.Tensor:
+        ) -> Tsor:
         """
         generate a batch from a list of relations and datas
         """
@@ -349,9 +345,9 @@ class DecisionCatModel:
 
     def cost(
             self,
-            data_points: Mapping[NodeType, torch.Tensor],
+            data_points: Mapping[NodeType, Tsor],
             relations: Iterable[CompositeArrow[NodeType, ArrowType]],
-            labels: DirectedGraph[NodeType]) -> torch.Tensor:
+            labels: DirectedGraph[NodeType]) -> Tsor:
         """
         Generates the matching cost function on a relation, given labels
         inputs
@@ -394,7 +390,7 @@ class TrainableDecisionCatModel(DecisionCatModel):
             relation_models: Mapping[ArrowType, RelationModel],
             scoring_model: ScoringModel,
             algebra_model: Algebra,
-            optimizer: Callable,
+            optimizer: Optimizer,
             epsilon: float = DEFAULT_EPSILON,
             **kwargs) -> None:
         """
@@ -444,7 +440,7 @@ class TrainableDecisionCatModel(DecisionCatModel):
             rel.unfreeze()
 
     @property
-    def total_cost(self) -> torch.tensor:
+    def total_cost(self) -> Tsor:
         """
         Get total cost currently stored
         """
@@ -459,7 +455,7 @@ class TrainableDecisionCatModel(DecisionCatModel):
 
     def train(
             self,
-            data_points: Mapping[NodeType, torch.Tensor],
+            data_points: Mapping[NodeType, Tsor],
             relations: Iterable[CompositeArrow[NodeType, ArrowType]],
             labels: DirectedGraph[NodeType],
             step: bool = True) -> None:
