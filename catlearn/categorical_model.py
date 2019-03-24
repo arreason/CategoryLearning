@@ -9,7 +9,7 @@ for the categorical model
 
 from itertools import chain
 from types import MappingProxyType
-from typing import Any, Callable, Iterable, Mapping, Generic, Tuple
+from typing import Any, Callable, Iterable, Mapping, Tuple
 
 import torch
 from torch.optim import Optimizer
@@ -54,7 +54,7 @@ class ScoringModel(AbstractModel):
 # pylint: enable=missing-docstring
 
 
-class DecisionCatModel(Generic[ArrowType]):
+class DecisionCatModel:
     """
     A class to abstract a decision categorical model
     Feed a collection of relation models and a scoring model to it in order to
