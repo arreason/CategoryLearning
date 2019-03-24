@@ -9,7 +9,7 @@ for the categorical model
 
 from itertools import chain
 from types import MappingProxyType
-from typing import Any, Callable, Iterable, Mapping, Generic
+from typing import Any, Callable, Iterable, Mapping, Generic, Tuple
 
 import torch
 from torch.optim import Optimizer
@@ -144,10 +144,16 @@ class DecisionCatModel(Generic[ArrowType]):
             self,
             data_points: Mapping[NodeType, Tsor],
             relations: Iterable[CompositeArrow[NodeType, ArrowType]],
-            labels: DirectedGraph[NodeType]) -> Tsor:
+            labels: DirectedGraph[NodeType]) -> Tuple[
+                Tsor,
+                RelationCache[NodeType, ArrowType],
+                DirectedGraph[NodeType]]:
         """
         Generates the matching cost function on a relation, given labels
-        inputs
+        inputs. Returns:
+            - the total matching cost
+            - the relation cache that was computed
+            - the label mathching
         """
         # generate the relation cache and match against labels
         cache = self.generate_cache(data_points, relations)
@@ -157,7 +163,9 @@ class DecisionCatModel(Generic[ArrowType]):
             sum(elem for _, elem in costs.values())
             for costs in matched.edges.values())
         nb_labels = sum(len(costs) for costs in matched.edges.values())
-        return total/max(nb_labels, 1) + cache.causality_cost
+        return (
+            total/max(nb_labels, 1) + cache.causality_cost,
+            cache, matched)
 
 
 class TrainableDecisionCatModel(DecisionCatModel):
@@ -255,12 +263,14 @@ class TrainableDecisionCatModel(DecisionCatModel):
             data_points: Mapping[NodeType, Tsor],
             relations: Iterable[CompositeArrow[NodeType, ArrowType]],
             labels: DirectedGraph[NodeType],
-            step: bool = True) -> None:
+            step: bool = True) -> Tuple[
+                RelationCache[NodeType, ArrowType], DirectedGraph[NodeType]]:
         """
         perform one training step on a batch of tuples
         """
         # backprop on the batch
-        self._cost += self.cost(data_points, relations, labels)
+        cost, cache, matched = self.cost(data_points, relations, labels)
+        self._cost += cost
 
         if step:
             # backprop on cost
@@ -271,3 +281,5 @@ class TrainableDecisionCatModel(DecisionCatModel):
 
             # reset gradient and total costs
             self.reset()
+
+        return cache, matched

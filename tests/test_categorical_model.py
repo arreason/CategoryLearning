@@ -323,7 +323,7 @@ class TestDecisionCatModel:
 
         # compute cost. we want to verify all goes smoothly and
         # the result is a positive finite real number as intended
-        cost = model.cost(datas, [arrow], labels)
+        cost, _, _ = model.cost(datas, [arrow], labels)
         assert torch.isfinite(cost)
         assert cost >= 0
 
@@ -355,12 +355,12 @@ class TestTrainableDecisionCatModel:
         labels = get_labels(arrow, nb_scores, nb_labels)
 
         # compute cost
-        initial_cost = model.cost(datas, [arrow], labels).item()
+        initial_cost, _, _ = model.cost(datas, [arrow], labels)
 
         # let's train for severam steps
         for _ in range(nb_steps):
             model.train(datas, [arrow], labels, step=True)  # type: ignore
 
-        final_cost = model.cost(datas, [arrow], labels).item()
+        final_cost, _, _ = model.cost(datas, [arrow], labels)
 
         assert final_cost <= initial_cost
