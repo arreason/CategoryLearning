@@ -68,9 +68,9 @@ class RelationCache(
             # case of length 1
             if len(arrow) == 1:
                 rel_value = self.generators[arrow.arrows[0]](
-                    cache.data(arrow[0:0]), cache.data(arrow[1:1]))
+                    cache.data(arrow[0:0]), cache.data(arrow.op[0:0]))
                 rel_score = scorer(
-                    cache.data(arrow[0:0]), cache.data(arrow[1:1]),
+                    cache.data(arrow[0:0]), cache.data(arrow.op[0:0]),
                     rel_value)
                 return rel_score, rel_value
 
@@ -176,6 +176,9 @@ class RelationCache(
         Match the composition graph with a graph of labels. For each label
         vector, get the best match in the graph. if No match is found, set to
         + infinity.
+        If no arrow is found in the cache, order 1 relations are generated
+        for matching. These relations
+        are added to the cache.
         """
         result_graph = DirectedGraph[NodeType]()
         for src, tar in labels.edges:
@@ -183,23 +186,21 @@ class RelationCache(
             if not result_graph.has_edge(src, tar):
                 result_graph.add_edge(src, tar)
 
+            # check if arrows exist to match label, add order 1 arrows
+            # if they don't
+            if (
+                    not self.graph.has_edge(src, tar)
+                    or not self.graph[src][tar]):
+                for arr in self.generators:
+                    self.add(CompositeArrow([src, tar], [arr]))
+
+            # get scores of existing arrows from src to tar
+            scores = {
+                arr.derive(): self[arr]
+                for arr in self.arrows(src, tar)}
+
             # go through labels and match them. Keep only the best
             for name, label in labels[src][tar].items():
-                # check if arrows exist to match label
-                try:
-                    scores = {
-                        arr.derive(): self[arr]
-                        for arr in self.arrows(src, tar)}
-                except KeyError:
-                    scores = {}
-
-                # if no score is available, evaluate all models
-                if not scores:
-                    scores = {
-                        CompositeArrow(arr): self._comp(
-                            CompositeArrow([src, tar], [arr]))[0]
-                        for arr in self.generators}
-
                 # evaluate candidate relationships
                 candidates = {
                     arr: subproba_kl_div(score, label)
