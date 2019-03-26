@@ -10,13 +10,11 @@ various utilities for tensor manipulation
 
 from typing import Optional, Sequence
 import torch
+from torch import Tensor as Tsor
 from torch.nn.functional import kl_div
 
 # default precision of computations
 DEFAULT_EPSILON = 1e-6
-
-# alias for torch tensors
-Tsor = torch.Tensor
 
 
 def repeat_tensor(
