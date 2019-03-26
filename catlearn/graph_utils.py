@@ -21,8 +21,8 @@ NodeType = TypeVar("NodeType")
 
 def mapping_product(mapping0: Mapping, mapping1: Mapping) -> Iterator:
     """
-    from two mapping {k0: d0, ...}, {k1: d1, ...}, returns an iterator
-    emulating items of a dictionary {(k0, k1): (d0, d1)}
+    from two mapping {k0: d0, ...}, {k1: d1, ...},
+    returns an iterator emulating items of a dictionary {(k0, k1): (d0, d1)}
     """
     return (
         tuple(zip(pair0, pair1))

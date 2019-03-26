@@ -308,8 +308,8 @@ class CompositionGraph(Generic[NodeType, ArrowType, AlgebraType], abc.Mapping): 
         Get an iterator over all arrows starting at src and ending at tar.
         If source or tar is None, will loop through all possible sources
         and arrows.
-        If no existing arrows (or src/tar not in the underlying graph), returns
-        an empty iterator
+        If no existing arrows (or src/tar not in the underlying graph),
+        returns an empty iterator
         """
         if src is None and tar is None:
             # iterate over all edges of graph in this case

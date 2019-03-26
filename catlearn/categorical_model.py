@@ -150,7 +150,8 @@ class DecisionCatModel:
                 DirectedGraph[NodeType]]:
         """
         Generates the matching cost function on a relation, given labels
-        inputs. Returns:
+        inputs.
+        Returns:
             - the total matching cost
             - the relation cache that was computed
             - the label mathching
