@@ -222,8 +222,6 @@ class CompositionGraph(Generic[NodeType, ArrowType, AlgebraType], abc.Mapping): 
     """
     Make a composition graph out of a list of Composite arrows
     Constructor Arguments:
-        - generator: a callable which generates the value of a relation
-            from the nodes and arrow indices
         - comp: a callable which computes the composite of 2 arrow values
         - arrows: any number of composite arrows
     """

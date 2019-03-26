@@ -5,7 +5,8 @@ Created on Sun Mar 24 20:32:59 2019
 
 @author: christophe_c
 """
-from typing import Mapping, Callable, Iterable, Generic, Tuple
+from typing import Mapping, Callable, Iterable, Generic, Tuple, Iterator
+from collections import abc
 
 import torch
 
@@ -22,10 +23,68 @@ BinaryOp = Callable[[Tsor, Tsor], Tsor]
 
 class RelationCache(
         Generic[NodeType, ArrowType],  # pylint: disable=unsubscriptable-object
-        CompositionGraph[NodeType, ArrowType, Tsor]):
+        abc.Mapping):
     """
     A cache to keep the values of all relations
     """
+
+    def _graph_comp(self) -> Callable[
+            [
+                CompositionGraph[NodeType, ArrowType, Tsor],
+                CompositeArrow[NodeType, ArrowType]
+                ], Tuple[Tsor, Tsor]]:
+        """
+        get the composition method to use with the underlying graph. This
+        function should be called only once during __init__
+        """
+        def graph_comp(
+                graph: CompositionGraph[NodeType, ArrowType, Tsor],
+                arrow: CompositeArrow[ArrowType, NodeType]
+            ) -> Tuple[Tsor, Tsor]:
+            """
+            compute value associated to given arrow, knowing using values
+            of its subparts
+            """
+            # case of length 1
+            if len(arrow) == 1:
+                rel_value = self.generators[arrow.arrows[0]](
+                    self._datas[arrow[0]], self._datas[arrow[-1]])  # type: ignore
+                rel_score = self._scorer(
+                    self._datas[arrow[0]], self._datas[arrow[-1]],  # type: ignore
+                    rel_value)
+                return rel_score, rel_value
+
+            # now take care of case of length >= 2
+            # compute the value of the arrow by composition
+            comp_value = self._comp(graph[arrow[:1]][1], graph[arrow[1:]][1])  # type: ignore
+            comp_scores = self._scorer(
+                self._datas[arrow[0]], self._datas[arrow[-1]], comp_value)  # type: ignore
+            comp_validity = comp_scores.sum()
+
+            # recursively access all the scores of the subarrow splits
+            # and check the composition score
+            for idx in range(1, len(arrow)):
+
+                # compute update to causality score
+                fst_scores = graph[arrow[:idx]][0].sum()  # type: ignore
+                scd_scores = graph[arrow[idx:]][0].sum()  # type: ignore
+                causal_score = torch.relu(
+                    torch.log(
+                        (self.epsilon + comp_validity) /
+                        (self.epsilon + fst_scores * scd_scores)))
+
+                self._causality_cost += causal_score
+                self._nb_compositions += 1
+
+                # if causality update > 0., relation is not valid: 0. scores
+                if causal_score > 0.:
+                    comp_final_scores = torch.zeros(comp_scores.shape)
+                else:
+                    comp_final_scores = comp_scores
+
+            return comp_final_scores, comp_value
+        return graph_comp  # type: ignore
+
     def __init__(
             self,
             generators: GeneratorMapping,
@@ -59,53 +118,22 @@ class RelationCache(
         # memorize existing arrow model names
         self.generators = generators
 
-        def rel_comp(
-                cache, arrow: CompositeArrow[NodeType, ArrowType]
-            ) -> Tuple[Tsor, Tsor]:
-            """
-            compute the composite of all the order 1 arrow making up the given
-            arrow, and account for causality cost
-            """
-            # case of length 1
-            if len(arrow) == 1:
-                rel_value = self.generators[arrow.arrows[0]](
-                    cache.data(arrow[0:0]), cache.data(arrow.op[0:0]))
-                rel_score = scorer(
-                    cache.data(arrow[0:0]), cache.data(arrow.op[0:0]),
-                    rel_value)
-                return rel_score, rel_value
+        # register scorer and composition operation
+        self._scorer = scorer
+        self._comp = comp
 
-            # now take care of case of length >= 2
-            # compute the value of the arrow by composition
-            comp_value = comp(cache.data(arrow[:1]), cache.data(arrow[1:]))
-            comp_scores = scorer(
-                cache.data(arrow[0:0]), cache.data(arrow.op[0:0]), comp_value)
-            comp_validity = comp_scores.sum()
+        # initialize underlying graph
+        self._graph = CompositionGraph[NodeType, ArrowType, Tsor](
+            self._graph_comp(), ())
 
-            # recursively access all the scores of the subarrow splits
-            # and check the composition score
-            for idx in range(1, len(arrow)):
+        # register wraping attributes
+        self.add = self._graph.add
+        self.graph = self._graph.graph
+        self.arrows = self._graph.arrows
 
-                # compute update to causality score
-                fst_scores = cache[arrow[:idx]].sum()
-                scd_scores = cache[arrow[idx:]].sum()
-                causal_score = torch.relu(
-                    torch.log(
-                        (self.epsilon + comp_validity) /
-                        (self.epsilon + fst_scores * scd_scores)))
-
-                cache._causality_cost += causal_score
-                cache._nb_compositions += 1
-
-                # if causality update > 0., relation is not valid: 0. scores
-                if causal_score > 0.:
-                    comp_final_scores = torch.zeros(comp_scores.shape)
-                else:
-                    comp_final_scores = comp_scores
-
-            return comp_final_scores, comp_value
-
-        super().__init__(rel_comp, arrows)
+        # fill the cache with provided arrows
+        for arrow in arrows:
+            self.add(arrow)
 
     @property
     def causality_cost(self):
@@ -124,7 +152,7 @@ class RelationCache(
             - if length of arrow >=1, the relation value
         """
         if arrow:
-            return super().__getitem__(arrow)[1]
+            return self._graph[arrow][1]
 
         # if arrow has length 0, return data corresponding to its node
         return self._datas[arrow[0]]  # type: ignore
@@ -141,7 +169,19 @@ class RelationCache(
         if not arrow:
             raise ValueError("Cannot get the score of an arrow of length 0")
         else:
-            return super().__getitem__(arrow)[0]
+            return self._graph[arrow][0]
+
+    def __iter__(self) -> Iterator[CompositeArrow]:
+        """
+        Iterate through arrows contained in the cache
+        """
+        return iter(self._graph)
+
+    def __len__(self) -> int:
+        """
+        Return the number of composite arrows in the structure
+        """
+        return len(self._graph)
 
     def __setitem__(self, node: NodeType, data_point: Tsor) -> None:
         """
@@ -151,23 +191,28 @@ class RelationCache(
         """
         self._datas[node] = data_point
 
-    def add(self, arrow: CompositeArrow[NodeType, ArrowType]) -> None:
+    def __delitem__(self, arrow: CompositeArrow[NodeType, ArrowType]) -> None:
         """
-        add composite arrow to the cache, starting by checking that data
-        for all the points is available.
+        Remove a composite arrow from the cache
         """
-        if not set(arrow.nodes) <= set(self._datas):
-            raise ValueError(
-                "Cannot add a composite whose support is not included"
-                "in the base dataset")
+        del self._graph[arrow]
 
-        super().add(arrow)
+    def __repr__(self) -> str:
+        """
+        Returns a string representation of the cache
+        """
+        return (
+            f"{type(self).__name__}"
+            + f"(datas: {repr(self._datas)}"
+            + ", arrows: {"
+            + ", ".join(f"{key}: {value}" for (key, value) in self.items())
+            + "})")
 
     def flush(self) -> None:
         """
         Flush all relations and datas content
         """
-        super().flush()
+        self._graph.flush()
         self._datas = {}
         self._causality_cost = torch.zeros(())
         self._nb_compositions = 0
