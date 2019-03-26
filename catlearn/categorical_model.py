@@ -17,10 +17,10 @@ from torch.optim import Optimizer
 from catlearn.tensor_utils import (
     DEFAULT_EPSILON, Tsor,
     remap_subproba)
-from catlearn.graph_utils import (
-    CompositeArrow, DirectedGraph, NodeType, ArrowType)
-from catlearn.algebra_models import Algebra
+from catlearn.graph_utils import DirectedGraph, NodeType
+from catlearn.composition_graph import CompositeArrow, ArrowType
 from catlearn.relation_cache import RelationCache
+from catlearn.algebra_models import Algebra
 
 
 # Abstract type definitions

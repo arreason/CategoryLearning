@@ -16,8 +16,8 @@ from torch import nn
 import pytest
 
 from catlearn.tensor_utils import subproba_kl_div, DEFAULT_EPSILON, Tsor
-from catlearn.graph_utils import (
-    DirectedGraph, CompositeArrow)
+from catlearn.graph_utils import DirectedGraph
+from catlearn.composition_graph import CompositeArrow
 from catlearn.categorical_model import (
     RelationModel, ScoringModel, RelationCache,
     DecisionCatModel, TrainableDecisionCatModel)

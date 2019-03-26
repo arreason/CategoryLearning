@@ -10,8 +10,9 @@ from typing import Mapping, Callable, Iterable, Generic, Tuple
 import torch
 
 from catlearn.tensor_utils import Tsor, DEFAULT_EPSILON, subproba_kl_div
-from catlearn.graph_utils import (
-    DirectedGraph, NodeType, ArrowType, CompositeArrow, CompositionGraph)
+from catlearn.graph_utils import DirectedGraph, NodeType
+from catlearn.composition_graph import (
+    ArrowType, CompositeArrow, CompositionGraph)
 
 # Some convenient type aliases
 GeneratorMapping = Mapping[ArrowType, Callable[[Tsor, Tsor], Tsor]]
