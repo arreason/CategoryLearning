@@ -38,7 +38,8 @@ DATA_DIR = "./tests/test_categorical_model/"
 
 FLAKY_TEST_RETRY = 3
 
-
+# Numerical precision for tests. Since some issues can occur based on precision
+# of batch matrix multiplication, can't take it too low
 TEST_EPSILON = 1e-4
 
 

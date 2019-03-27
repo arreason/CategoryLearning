@@ -199,6 +199,23 @@ def remap_subproba(
     """
     remap a subprobability vector to an other subprobability vector, making
     sure that remapping the reference yields a vector of total proba 1.
+    This is done by considering coordinates as squares of coordinates
+    of vectors in euclidian space.
+    Considering the following vectors of norm 1:
+                p = sqrt(to_remap)                      , sqrt(1-sum(to_remap))
+                r0 = sqrt(reference)/sqrt(sum(reference)), 0.
+                r = sqrt(reference)                     , sqrt(1-sum(reference)
+                v = 0 ... 0                             , 1.
+        we want to apply to p a rotation
+        in the plane [r0, v] which brings r to r0.
+        The angle theta of rotation verifies:
+                cos(theta) = sum(reference)
+        Hence we get:
+            p - <r0, p>r0 - <v,p>v
+            + (<r0, p>cos(theta) - <v, p>sin(theta))r0
+            + (<r0, p>sin(theta) + <v, p>cos(theta))v
+        Taking the square of all coordinates except the last then yields
+        the result of remap_subproba
     """
     # compute total proba of both vectors
     to_remap_proba = to_remap.sum(dim=dim, keepdim=True)
