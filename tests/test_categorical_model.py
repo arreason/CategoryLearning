@@ -25,6 +25,8 @@ from catlearn.algebra_models import (
     Algebra, VectAlgebra, MatrixAlgebra, AffineAlgebra)
 
 from tests.test_tools import pytest_generate_tests
+
+
 # List of algebras to verify
 # Automagic, adding an algebra will get tested right away
 CLASSES_TO_TEST = {VectAlgebra, MatrixAlgebra, AffineAlgebra}
@@ -36,7 +38,8 @@ DATA_DIR = "./tests/test_categorical_model/"
 
 FLAKY_TEST_RETRY = 3
 
-TEST_EPSILON = 1e-5
+
+TEST_EPSILON = 1e-4
 
 
 @pytest.fixture(params=[1, 8])
@@ -329,7 +332,7 @@ class TestDecisionCatModel:
         # compute cache and matching for comparison
         expected_cache = RelationCache[int, int](
             model.relations, model.score,
-            model.algebra.comp, datas, (arrow,))
+            model.algebra.comp, datas, [arrow])
         expected_matched = expected_cache.match(labels)
 
         # verify obtained cache and matching are identical to expected
