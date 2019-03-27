@@ -15,7 +15,7 @@ from torch import nn
 
 import pytest
 
-from catlearn.tensor_utils import subproba_kl_div, DEFAULT_EPSILON, Tsor
+from catlearn.tensor_utils import subproba_kl_div, Tsor
 from catlearn.graph_utils import DirectedGraph
 from catlearn.composition_graph import CompositeArrow
 from catlearn.categorical_model import (
@@ -35,6 +35,8 @@ DATA_DIR = "./tests/test_categorical_model/"
 
 
 FLAKY_TEST_RETRY = 3
+
+TEST_EPSILON = 1e-5
 
 
 @pytest.fixture(params=[1, 8])
@@ -152,18 +154,14 @@ def get_labels(
     return labels
 
 
-def get_model(
+def get_trainable_model(
         relations: Dict[int, RelationModel],
-        scoring: ScoringModel, algebra: Algebra,
-        trainable: bool = False) -> DecisionCatModel:
+        scoring: ScoringModel, algebra: Algebra) -> TrainableDecisionCatModel:
     """
-    Get a categorical model using test relation models and scoring
-    If trainable is set to True, returns a trainable decision model.
+    Prepare a trainable decision model
     """
-    if trainable:
-        return TrainableDecisionCatModel(
-            relations, scoring, algebra, torch.optim.SGD, lr=0.001)
-    return DecisionCatModel(relations, scoring, algebra)
+    return TrainableDecisionCatModel(
+        relations, scoring, algebra, torch.optim.SGD, lr=0.001)
 
 
 class TestRelationCache:
@@ -210,7 +208,7 @@ class TestRelationCache:
 
         assert (
             (cache.data(arrow) - expected_result).norm()
-            <= len(arrow) * algebra.flatdim * DEFAULT_EPSILON)
+            <= len(arrow) * algebra.flatdim * TEST_EPSILON)
 
     @staticmethod
     def test_score(
@@ -244,7 +242,7 @@ class TestRelationCache:
             expected_result = raw_score
 
         assert subproba_kl_div(
-            cache[arrow], expected_result) <= DEFAULT_EPSILON
+            cache[arrow], expected_result) <= TEST_EPSILON
 
     @staticmethod
     def test_matching(
@@ -298,7 +296,7 @@ class TestRelationCache:
                 assert matches[src][tar][label][0] == expected_match
                 assert (
                     (matches[src][tar][label][1] - expected_cost).abs()
-                    <= 2. * DEFAULT_EPSILON)
+                    <= TEST_EPSILON)
 
 
 class TestDecisionCatModel:
@@ -313,7 +311,7 @@ class TestDecisionCatModel:
         Test cost function of decision cat model
         """
         # create model
-        model = get_model(relations, scoring, algebra, trainable=False)
+        model = DecisionCatModel(relations, scoring, algebra)
 
         # generate datapoints for arrow
         datas = {node: torch.rand(nb_features) for node in arrow}
@@ -321,21 +319,83 @@ class TestDecisionCatModel:
         # generate labels
         labels = get_labels(arrow, nb_scores, nb_labels)
 
-        # compute cost. we want to verify all goes smoothly and
-        # the result is a positive finite real number as intended
-        cost, _, _ = model.cost(datas, [arrow], labels)
+        # compute cost. we want to verify all goes smoothly
+        cost, cache, matched = model.cost(datas, [arrow], labels)
+
+        # the resulting cost should be a positive finite real number
         assert torch.isfinite(cost)
         assert cost >= 0
+
+        # compute cache and matching for comparison
+        expected_cache = RelationCache[int, int](
+            model.relations, model.score,
+            model.algebra.comp, datas, (arrow,))
+        expected_matched = expected_cache.match(labels)
+
+        # verify obtained cache and matching are identical to expected
+        assert set(cache.keys()) == set(expected_cache.keys())
+        for arr, scores in cache.items():
+            assert subproba_kl_div(
+                scores, expected_cache[arr]) <= TEST_EPSILON
+
+        assert set(matched.edges()) == set(expected_matched.edges())
+        for (src, tar), labels in matched.edges().items():  # pylint: disable=no-member
+            for name, label in labels.items():
+                assert torch.abs(
+                    label[1] - expected_matched[src][tar][name][1]
+                    ) <= TEST_EPSILON
 
 
 class TestTrainableDecisionCatModel:
     """ Tests for TrainableDecisionCatModel class"""
     params: Dict[str, List[Any]] = {
-        "test_train": [dict(nb_steps=50)]}
+        "test_train_with_update": [dict(nb_steps=50)]}
+
+    @staticmethod
+    def test_train_without_update(
+            arrow: CompositeArrow[int, int],
+            relations: Dict[int, RelationModel], scoring: ScoringModel,
+            algebra: Algebra, nb_features: int,
+            nb_labels: int, nb_scores: int) -> None:
+        """
+        Test training, verifying that not activating updates does:
+            - conserve gradients
+            - lead to same results of evaluation
+        """
+        # get model and its parameters
+        model = get_trainable_model(relations, scoring, algebra)
+
+        # generate datapoints for arrow
+        datas = {node: torch.rand(nb_features) for node in arrow}
+
+        # generate labels
+        labels = get_labels(arrow, nb_scores, nb_labels)
+
+        # go through one train stage
+        expected_cache, expected_matched = model.train(
+            datas, [arrow], labels, step=False)
+
+        # reset model, extract everything again
+        model.reset()
+        cache, matched = model.train(
+            datas, [arrow], labels, step=False)
+
+        # verify obtained cache and matching are identical to expected
+        assert set(cache.keys()) == set(expected_cache.keys())
+        for arr, scores in cache.items():
+            assert subproba_kl_div(
+                scores, expected_cache[arr]) <= TEST_EPSILON
+
+        assert set(matched.edges()) == set(expected_matched.edges())
+        for (src, tar), labels in matched.edges().items():  # pylint: disable=no-member
+            for name, label in labels.items():
+                assert torch.abs(
+                    label[1] - expected_matched[src][tar][name][1]
+                    ) <= TEST_EPSILON
 
     @staticmethod
     @pytest.mark.flaky(reruns=FLAKY_TEST_RETRY)
-    def test_train(
+    def test_train_with_update(
             arrow: CompositeArrow[int, int],
             relations: Dict[int, RelationModel], scoring: ScoringModel,
             algebra: Algebra,
@@ -346,7 +406,7 @@ class TestTrainableDecisionCatModel:
         during training when using same data
         """
         # get model
-        model = get_model(relations, scoring, algebra, trainable=True)
+        model = get_trainable_model(relations, scoring, algebra)
 
         # generate datapoints for arrow
         datas = {node: torch.rand(nb_features) for node in arrow}
