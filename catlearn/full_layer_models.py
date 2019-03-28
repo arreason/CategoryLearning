@@ -3,10 +3,12 @@
 """
 This file introduces factories to define full perceptron models
 """
+
+from __future__ import annotations
 from functools import reduce
 from itertools import chain
 from operator import mul
-from typing import Any, Callable, Sequence, Tuple, Iterable
+from typing import Any, Callable, Sequence, Tuple, Iterable, Union, IO
 import torch
 import torch.nn as nn
 
@@ -264,6 +266,19 @@ class FullPerceptron(LayeredModel):
         batch_shape = batch_output.shape[:-1]
         return batch_output.view(batch_shape + self.output_shape)
 
+    def save(self, flike: Union[str, IO]):
+        """
+        Save the model to a given location (path or file-like object)
+        """
+        torch.save(self, flike)
+
+    @staticmethod
+    def load(flike: Union[str, IO]) -> FullPerceptron:
+        """
+        Load a model from a given location (path or file-like object)
+        """
+        return torch.load(flike)
+
 
 class FullPerceptronWithRandomState(LayeredModel):
     """
@@ -330,3 +345,16 @@ class FullPerceptronWithRandomState(LayeredModel):
         random_state = self.draw_state(batch_shape)
 
         return torch.cat((flat_input, random_state), -1)
+
+    def save(self, flike: Union[str, IO]):
+        """
+        Save the model to a given location (path or file-like object)
+        """
+        torch.save(self, flike)
+
+    @staticmethod
+    def load(flike: Union[str, IO]) -> FullPerceptronWithRandomState:
+        """
+        Load a model from a given location (path or file-like object)
+        """
+        return torch.load(flike)
