@@ -288,7 +288,7 @@ class TrainableDecisionCatModel(DecisionCatModel):
         """
         # backprop on the batch
         cost, cache, matched = self.cost(data_points, relations, labels)
-        self._cost += cost
+        self._cost = self._cost + cost
 
         if step:
             # backprop on cost
