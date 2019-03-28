@@ -10,6 +10,7 @@ various utilities for tensor manipulation
 
 from typing import Optional, Sequence
 import torch
+from torch import Tensor as Tsor
 from torch.nn.functional import kl_div
 
 # default precision of computations
@@ -17,10 +18,10 @@ DEFAULT_EPSILON = 1e-6
 
 
 def repeat_tensor(
-        to_repeat: torch.Tensor,
+        to_repeat: Tsor,
         nb_repeats: int,
         axis: int,
-        copy: bool = False) -> torch.Tensor:
+        copy: bool = False) -> Tsor:
     """
     stacks a tensor over itself nb_repeats times, over axis dimension
 
@@ -61,11 +62,11 @@ def is_shape_broadcastable(
 
 
 def sorted_weighted_sum(
-        to_sum: torch.Tensor,
-        weights: torch.Tensor,
+        to_sum: Tsor,
+        weights: Tsor,
         axis: int,
         keepdim: bool,
-        largest: bool) -> torch.Tensor:
+        largest: bool) -> Tsor:
     """
     Orders elements to sum then sums them with given ponderations
     inputs:
@@ -78,7 +79,7 @@ def sorted_weighted_sum(
         largest: wether the k largest are returned;
                 otherwise the k smallest are returned
     outputs:
-        torch.Tensor, of shape :
+        Tsor, of shape :
             input_shape[:(axis-1)] + input_shape[(axis+1):] if
                 keepdim is false
             input_shape[:(axis-1)] + (1,) + input_shape[(axis+1):] if
@@ -104,8 +105,8 @@ def sorted_weighted_sum(
 
 
 def tensor_equals(
-        left: torch.Tensor,
-        right: torch.Tensor,
+        left: Tsor,
+        right: Tsor,
         precision: float = 1e-6) -> bool:
     """ Are two tensors equal? """
     return torch.lt(
@@ -114,8 +115,8 @@ def tensor_equals(
 
 def full_like(
         value,  # numbers.Real but mypy does not like it...
-        tensor: torch.Tensor,
-        shape: Optional[Sequence[int]] = None) -> torch.Tensor:
+        tensor: Tsor,
+        shape: Optional[Sequence[int]] = None) -> Tsor:
     """
     Create a new `value`-filled tensor based on an input tensor.
     NB: type, device and layout are conserved
@@ -128,8 +129,8 @@ def full_like(
 
 
 def zeros_like(
-        tensor: torch.Tensor,
-        shape: Optional[Sequence[int]] = None) -> torch.Tensor:
+        tensor: Tsor,
+        shape: Optional[Sequence[int]] = None) -> Tsor:
     """
     Create a new 0-filled tensor based on an input tensor.
     NB: type, device and layout are conserved
@@ -138,8 +139,8 @@ def zeros_like(
 
 
 def ones_like(
-        tensor: torch.Tensor,
-        shape: Optional[Sequence[int]] = None) -> torch.Tensor:
+        tensor: Tsor,
+        shape: Optional[Sequence[int]] = None) -> Tsor:
     """
     Create a new 1-filled tensor based on an input tensor.
     NB: type, device and layout are conserved
@@ -148,9 +149,9 @@ def ones_like(
 
 
 def clip_proba(
-        proba_vector: torch.Tensor,
+        proba_vector: Tsor,
         dim: int = -1,
-        epsilon: float = DEFAULT_EPSILON) -> torch.Tensor:
+        epsilon: float = DEFAULT_EPSILON) -> Tsor:
     """
     clip a probability vector to remove pure 0. and 1. values, to avoid
     numerical errors. Also works on subprobability vectors.
@@ -168,9 +169,9 @@ def clip_proba(
 
 
 def subproba_kl_div(
-        predicted: torch.Tensor, labels: torch.Tensor,
+        predicted: Tsor, labels: Tsor,
         epsilon: float = DEFAULT_EPSILON,
-        dim: int = -1, keepdim: bool = False) -> torch.Tensor:
+        dim: int = -1, keepdim: bool = False) -> Tsor:
     """
     compute KL-divergence of subprobability vectors, extending them to sum to 1
     The dim on which they are assumed to be subprobability vectors is -1
@@ -190,3 +191,47 @@ def subproba_kl_div(
 
     # sum all components of kl and return
     return kl_direct.sum(dim=dim, keepdim=keepdim) + kl_complement
+
+
+def remap_subproba(
+        to_remap: Tsor, reference: Tsor,
+        dim: int = -1) -> Tsor:
+    """
+    remap a subprobability vector to an other subprobability vector, making
+    sure that remapping the reference yields a vector of total proba 1.
+    This is done by considering coordinates as squares of coordinates
+    of vectors in euclidian space.
+    Considering the following vectors of norm 1:
+                p = sqrt(to_remap)                      , sqrt(1-sum(to_remap))
+                r0 = sqrt(reference)/sqrt(sum(reference)), 0.
+                r = sqrt(reference)                     , sqrt(1-sum(reference)
+                v = 0 ... 0                             , 1.
+        we want to apply to p a rotation
+        in the plane [r0, v] which brings r to r0.
+        The angle theta of rotation verifies:
+                cos(theta) = sum(reference)
+        Hence we get:
+            p - <r0, p>r0 - <v,p>v
+            + (<r0, p>cos(theta) - <v, p>sin(theta))r0
+            + (<r0, p>sin(theta) + <v, p>cos(theta))v
+        Taking the square of all coordinates except the last then yields
+        the result of remap_subproba
+    """
+    # compute total proba of both vectors
+    to_remap_proba = to_remap.sum(dim=dim, keepdim=True)
+    reference_proba = reference.sum(dim=dim, keepdim=True)
+
+    # compute square roots, to use as vectors in euclidian vector space
+    to_remap_sqrt = to_remap.sqrt()
+    reference_sqrt = reference.sqrt()
+
+    # inner product of sqrt vectors and total correction factor
+    inner_product = torch.sum(
+        to_remap_sqrt * reference_sqrt, dim=dim, keepdim=True)
+    compl_proba_sqrt = torch.sqrt(
+        (1. - to_remap_proba) * (1. - reference_proba))
+    corr_factor = (
+        inner_product * (1. - 1./reference_proba.sqrt())
+        + compl_proba_sqrt)/reference_proba.sqrt()
+
+    return (to_remap_sqrt + corr_factor * reference_sqrt) ** 2

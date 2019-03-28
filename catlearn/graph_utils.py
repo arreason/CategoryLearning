@@ -17,14 +17,12 @@ import numpy as np
 from networkx import DiGraph, NetworkXError
 
 NodeType = TypeVar("NodeType")
-ArrowType = TypeVar("ArrowType")
-AlgebraType = TypeVar("AlgebraType")
 
 
 def mapping_product(mapping0: Mapping, mapping1: Mapping) -> Iterator:
     """
-    from two mapping {k0: d0, ...}, {k1: d1, ...}, returns an iterator
-    emulating items of a dictionary {(k0, k1): (d0, d1)}
+    From two mapping {k0: d0, ...}, {k1: d1, ...},
+    returns an iterator emulating items of a dictionary {(k0, k1): (d0, d1)}
     """
     return (
         tuple(zip(pair0, pair1))
@@ -491,3 +489,31 @@ class GraphRandomFactory:
             for (_, op), args in zip(ops, operands))
 
         return self._graphs
+
+
+def generate_random_graph(
+        nb_steps: int, random_generator: random.Random,
+        *args, **kwargs):
+    """
+    Generate a random graph using a random factory.
+    Arguments:
+        - nb_steps: the number of steps used for the generation of the factory
+        - random_generator: the pseudo-random generator to be used
+        - *args, **kwargs: arguments passed to the factory. The following
+            default values will be used:
+                pruning_factor: 0.15
+                weights: 0.15, 0.15, 0.15, 0.15, 0.15
+                nb_graphs: 5
+    """
+    # create factory
+    factory = GraphRandomFactory(
+        [0.15, 0.15, 0.15, 0.15, 0.14], 5, 0.15, random_generator,
+        *args, **kwargs)
+
+    # go through generation steps
+    for _ in range(nb_steps):
+        next(factory)  # type: ignore
+
+    # return a randomly chosen graph in the factory's memory
+    idx = random_generator.randint(0, factory.nb_graphs - 1)
+    return factory.graphs[idx]

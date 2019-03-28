@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-# pylint: disable=redefined-outer-name
+# pylint: disable=redefined-outer-name, invalid-name, abstract-method, no-self-use
 """
 tests for random graph generation
 """
 
 from typing import (
     Any, Callable, Hashable, Dict, Iterable, Tuple,
-    Set, FrozenSet, Optional, List, Union)
-from itertools import repeat, combinations
+    Set, FrozenSet, Optional, List)
+from itertools import repeat
 from collections import Counter
 from copy import copy
 from operator import and_, or_, add, mul, matmul
