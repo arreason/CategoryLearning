@@ -168,8 +168,7 @@ class RelationCache(
         """
         if not arrow:
             raise ValueError("Cannot get the score of an arrow of length 0")
-        else:
-            return self._graph[arrow][0]
+        return self._graph[arrow][0]
 
     def __iter__(self) -> Iterator[CompositeArrow]:
         """

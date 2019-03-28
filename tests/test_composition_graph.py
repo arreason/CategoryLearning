@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+# pylint: disable=redefined-outer-name, too-few-public-methods
 """
 Created on Tue Mar 26 11:50:31 2019
 
