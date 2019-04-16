@@ -7,9 +7,10 @@ This file introduces the factories for creating the necessary cost functions
 for the categorical model
 """
 
+from __future__ import annotations
 from itertools import chain
 from types import MappingProxyType
-from typing import Any, Callable, Iterable, Mapping, Tuple
+from typing import Any, Callable, Dict, IO, Iterable, Mapping, Tuple, Union
 
 import torch
 from torch.optim import Optimizer
@@ -168,6 +169,22 @@ class DecisionCatModel:
             total/max(nb_labels, 1) + cache.causality_cost,
             cache, matched)
 
+    def save(self, flike: Union[str, IO]):
+        """
+        Save the model to a given location (path or file-like object)
+        """
+        torch.save(self, flike)
+
+    @staticmethod
+    def load(flike: Union[str, IO]) -> DecisionCatModel:
+        """
+        Load a model from a given location (path or file-like object)
+        """
+        return torch.load(flike)
+
+
+
+
 
 class TrainableDecisionCatModel(DecisionCatModel):
     """
@@ -271,7 +288,7 @@ class TrainableDecisionCatModel(DecisionCatModel):
         """
         # backprop on the batch
         cost, cache, matched = self.cost(data_points, relations, labels)
-        self._cost += cost
+        self._cost = self._cost + cost
 
         if step:
             # backprop on cost
@@ -284,3 +301,16 @@ class TrainableDecisionCatModel(DecisionCatModel):
             self.reset()
 
         return cache, matched
+
+    def save(self, flike: Union[str, IO]):
+        """
+        Save the model to a given location (path or file-like object)
+        """
+        torch.save(self, flike)
+
+    @staticmethod
+    def load(flike: Union[str, IO]) -> TrainableDecisionCatModel:
+        """
+        Load a model from a given location (path or file-like object)
+        """
+        return torch.load(flike)

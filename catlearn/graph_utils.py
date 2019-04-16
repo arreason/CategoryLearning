@@ -492,8 +492,7 @@ class GraphRandomFactory:
 
 
 def generate_random_graph(
-        nb_steps: int, random_generator: random.Random,
-        *args, **kwargs):
+        nb_steps: int, random_generator: random.Random, *args):
     """
     Generate a random graph using a random factory.
     Arguments:
@@ -507,8 +506,8 @@ def generate_random_graph(
     """
     # create factory
     factory = GraphRandomFactory(
-        [0.15, 0.15, 0.15, 0.15, 0.14], 5, 0.15, random_generator,
-        *args, **kwargs)
+        [0.15, 0.15, 0.15, 0.15, 0.14],
+        5, 0.15, random_generator, *args)
 
     # go through generation steps
     for _ in range(nb_steps):

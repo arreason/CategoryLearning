@@ -11,6 +11,7 @@ tests for full layer models
 
 import random
 from typing import List, Tuple
+from tempfile import NamedTemporaryFile
 import pytest
 import torch
 from torch import nn
@@ -55,6 +56,12 @@ def num_units(request) -> List[int]:
 def num_random(request) -> int:
     """ Random state extension """
     return random.randint(*request.param)
+
+
+@pytest.fixture(params=[False, True])
+def reload(request) -> bool:
+    """ Save and reload model before running the test """
+    return request.param
 
 
 def test_constant_model() -> None:
@@ -127,20 +134,27 @@ class TestFullPerceptron:
     def get_model(
             input_shape: TensorShape,
             output_shape: TensorShape,
-            num_units: List[int]) -> FullPerceptron:
+            num_units: List[int],
+            reload: bool) -> FullPerceptron:
         """ Construct Torch module """
-        return FullPerceptron(input_shape, output_shape, num_units, nn.Sigmoid)
+        model = FullPerceptron(input_shape, output_shape, num_units, nn.Sigmoid)
+        if not reload:
+            return model
+        with NamedTemporaryFile() as tmpfile:
+            model.save(tmpfile)
+            return FullPerceptron.load(tmpfile.name)
 
     def test_output_shape(
             self,
             input_shape: TensorShape,
             output_shape: TensorShape,
             num_units: List[int],
-            batch_shape: TensorShape) -> None:
+            batch_shape: TensorShape,
+            reload: bool) -> None:
         """
         draw random input and verify output has the right shape
         """
-        model = self.get_model(input_shape, output_shape, num_units)
+        model = self.get_model(input_shape, output_shape, num_units, reload)
         input_batch = torch.rand(batch_shape + input_shape)
         output_batch = model.forward(input_batch)
 
@@ -151,11 +165,12 @@ class TestFullPerceptron:
             self,
             input_shape: TensorShape,
             output_shape: TensorShape,
-            num_units: List[int]) -> None:
+            num_units: List[int],
+            reload: bool) -> None:
         """
         test that the parameters' list has the right size
         """
-        model = self.get_model(input_shape, output_shape, num_units)
+        model = self.get_model(input_shape, output_shape, num_units, reload)
         parameters = list(model.parameters())
         # Input reshape, (Linear, Sigmoid), output reshape
         assert len(parameters) == 1 + 2 * len(num_units) + 1
@@ -164,11 +179,12 @@ class TestFullPerceptron:
             self,
             input_shape: TensorShape,
             output_shape: TensorShape,
-            num_units: List[int]) -> None:
+            num_units: List[int],
+            reload: bool) -> None:
         """
         test that the parameters' list has the right size
         """
-        model = self.get_model(input_shape, output_shape, num_units)
+        model = self.get_model(input_shape, output_shape, num_units, reload)
         children = list(model.children())
         # Initial and final reshape
         assert isinstance(children[0], ConstantModel)
@@ -182,7 +198,6 @@ class TestFullPerceptron:
             assert isinstance(child, expected_type), \
                 f"Type mismatch on layer {1+i}: {expected_type}"
 
-
 class TestFullPerceptronWithRandomState:
     """
     Test facility for perceptron model with random state
@@ -194,13 +209,16 @@ class TestFullPerceptronWithRandomState:
             input_shape: TensorShape,
             output_shape: TensorShape,
             num_units: List[int],
-            num_random: int) -> FullPerceptronWithRandomState:
+            num_random: int,
+            reload: bool) -> FullPerceptronWithRandomState:
         """ Construct Torch module """
-        return FullPerceptronWithRandomState(input_shape,
-                                             output_shape,
-                                             num_units,
-                                             num_random,
-                                             nn.Sigmoid)
+        model = FullPerceptronWithRandomState(
+            input_shape, output_shape, num_units, num_random, nn.Sigmoid)
+        if not reload:
+            return model
+        with NamedTemporaryFile() as tmpfile:
+            model.save(tmpfile)
+            return FullPerceptronWithRandomState.load(tmpfile.name)
 
     def test_draw_state(
             self,
@@ -208,12 +226,13 @@ class TestFullPerceptronWithRandomState:
             output_shape: TensorShape,
             num_units: List[int],
             num_random: int,
-            batch_shape: TensorShape) -> None:
+            batch_shape: TensorShape,
+            reload: bool) -> None:
         """
         unit test random drawing
         """
         model = self.get_model(input_shape, output_shape,
-                               num_units, num_random)
+                               num_units, num_random, reload)
         base = model.draw_state(batch_shape)
         for i in range(1, self.RNG_CHECK_ORDER):
             assert (base != model.draw_state(batch_shape)).all(), i
@@ -224,12 +243,13 @@ class TestFullPerceptronWithRandomState:
             output_shape: TensorShape,
             num_units: List[int],
             num_random: int,
-            batch_shape: TensorShape) -> None:
+            batch_shape: TensorShape,
+            reload: bool) -> None:
         """
         draw random input, verify that augmented input is random
         """
         model = self.get_model(input_shape, output_shape,
-                               num_units, num_random)
+                               num_units, num_random, reload)
         batch_input = torch.rand(batch_shape + input_shape)
         base_augmented_input = model.augment_input(batch_input)
 
@@ -247,12 +267,13 @@ class TestFullPerceptronWithRandomState:
             output_shape: TensorShape,
             num_units: List[int],
             num_random: int,
-            batch_shape: TensorShape) -> None:
+            batch_shape: TensorShape,
+            reload: bool) -> None:
         """
         draw random input and verify output has the right shape
         """
         model = self.get_model(input_shape, output_shape,
-                               num_units, num_random)
+                               num_units, num_random, reload)
         input_batch = torch.rand(batch_shape + input_shape)
         output_batch = model.forward(input_batch)
 
@@ -264,12 +285,13 @@ class TestFullPerceptronWithRandomState:
             input_shape: TensorShape,
             output_shape: TensorShape,
             num_units: List[int],
-            num_random: int) -> None:
+            num_random: int,
+            reload) -> None:
         """
         check that the parameters' list has the right shape
         """
         model = self.get_model(input_shape, output_shape,
-                               num_units, num_random)
+                               num_units, num_random, reload)
         parameters = list(model.parameters())
         assert len(parameters) == 2 * (len(num_units) + 1)
 
@@ -278,12 +300,13 @@ class TestFullPerceptronWithRandomState:
             input_shape: TensorShape,
             output_shape: TensorShape,
             num_units: List[int],
-            num_random: int) -> None:
+            num_random: int,
+            reload: bool) -> None:
         """
         test that the parameters' list has the right size
         """
         model = self.get_model(input_shape, output_shape,
-                               num_units, num_random)
+                               num_units, num_random, reload)
         children = list(model.children())
         # Input augmentation and flattening
         assert isinstance(children[0], ConstantModel)

@@ -7,6 +7,7 @@ Tests for the categorical_model file.
 from typing import Any, Dict, Iterable, List, Callable
 from functools import reduce
 from itertools import combinations, product
+from tempfile import NamedTemporaryFile
 from math import inf
 import random
 
@@ -79,55 +80,63 @@ def algebra(request: Any, dim_rels: int) -> Algebra:
     return request.param(dim_rels)
 
 
+@pytest.fixture(params=[False, True])
+def reload(request) -> bool:
+    """ Save and reload model before running the test """
+    return request.param
+
+
+class CustomRelation(RelationModel):
+    """ Fake relations """
+    def __init__(self, nb_features: int, algebra: Algebra) -> None:
+        self.linear = nn.Linear(2 * nb_features, algebra.flatdim)
+
+    @property
+    def parameters(self) -> Callable[[], Iterable[Any]]:
+        return self.linear.parameters
+
+    def __call__(self, x: Tsor, y: Tsor) -> Tsor:
+        """ Compute x R y """
+        return self.linear(torch.cat((x, y), -1))
+
+
 @pytest.fixture
 def relations(
         request: Any, nb_relations: int, nb_features: int,
         algebra: Algebra) -> Dict[int, RelationModel]:
     """ relation models """
 
-    class CustomRelation(RelationModel):
-        """ Fake relations """
-        def __init__(self, nb_features: int, algebra: Algebra) -> None:
-            self.linear = nn.Linear(2 * nb_features, algebra.flatdim)
 
-        @property
-        def parameters(self) -> Callable[[], Iterable[Any]]:
-            return self.linear.parameters
-
-        def __call__(self, x: Tsor, y: Tsor) -> Tsor:
-            """ Compute x R y """
-            return self.linear(torch.cat((x, y), -1))
 
     return {
         idx: CustomRelation(nb_features, algebra)
         for idx in range(nb_relations)}
 
 
+class CustomScore(ScoringModel):
+    """ Fake score """
+    def __init__(
+            self, nb_features: int,
+            nb_scores: int, algebra: Algebra) -> None:
+        self.linear = nn.Linear(
+            2 * nb_features + algebra.flatdim, nb_scores + 1)
+        self.softmax = torch.nn.Softmax(dim=-1)
+
+    @property
+    def parameters(self) -> Callable[[], Iterable[Any]]:
+        return self.linear.parameters
+
+
+    def __call__(self, src: Tsor, dst: Tsor, rel: Tsor) -> Tsor:
+        """ Compute S(src, dst, rel) """
+        cat_input = torch.cat((src, dst, rel), -1)
+        return self.softmax(self.linear(cat_input))[..., :-1]
+
+
 @pytest.fixture
 def scoring(
         nb_features: int, nb_scores: int, algebra: Algebra) -> ScoringModel:
     """ scoring model """
-    class CustomScore(ScoringModel):
-        """ Fake score """
-        def __init__(self, nb_features: int,
-                     nb_scores: int, algebra: Algebra) -> None:
-            self.linear = nn.Linear(
-                2 * nb_features + algebra.flatdim, nb_scores + 1)
-            self.softmax = torch.nn.Softmax(dim=-1)
-
-        @property
-        def parameters(self) -> Callable[[], Iterable[Any]]:
-            return self.linear.parameters
-
-
-        def __call__(self,
-                     src: Tsor,
-                     dst: Tsor,
-                     rel: Tsor) -> Tsor:
-            """ Compute S(src, dst, rel) """
-            cat_input = torch.cat((src, dst, rel), -1)
-            return self.softmax(self.linear(cat_input))[..., :-1]
-
     return CustomScore(nb_features, nb_scores, algebra)
 
 
@@ -360,7 +369,8 @@ class TestTrainableDecisionCatModel:
             arrow: CompositeArrow[int, int],
             relations: Dict[int, RelationModel], scoring: ScoringModel,
             algebra: Algebra, nb_features: int,
-            nb_labels: int, nb_scores: int) -> None:
+            nb_labels: int, nb_scores: int,
+            reload: bool) -> None:
         """
         Test training, verifying that not activating updates does:
             - conserve gradients
@@ -380,7 +390,12 @@ class TestTrainableDecisionCatModel:
             datas, [arrow], labels, step=False)
 
         # reset model, extract everything again
-        model.reset()
+        if reload:
+            with NamedTemporaryFile() as tmpfile:
+                model.save(tmpfile)
+                model = TrainableDecisionCatModel.load(tmpfile.name)
+        else:
+            model.reset()
         cache, matched = model.train(
             datas, [arrow], labels, step=False)
 
@@ -421,7 +436,7 @@ class TestTrainableDecisionCatModel:
         # compute cost
         initial_cost, _, _ = model.cost(datas, [arrow], labels)
 
-        # let's train for severam steps
+        # let's train for several steps
         for _ in range(nb_steps):
             model.train(datas, [arrow], labels, step=True)  # type: ignore
 
