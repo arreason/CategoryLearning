@@ -221,7 +221,9 @@ class RelationCache(
         self._causality_cost = torch.zeros(())
         self._nb_compositions = 0
 
-    def match(self, labels: DirectedGraph[NodeType]) -> Tsor:
+    def match(
+            self, labels: DirectedGraph[NodeType],
+            match_negatives=True) -> Tsor:
         """
         Match the composition graph with a graph of labels. For each label
         vector, get the best match in the graph. if No match is found, set to
@@ -230,6 +232,20 @@ class RelationCache(
         for matching. These relations
         are added to the cache.
         """
+        def matcher(score, label):
+            """
+            Used to compare a relation's score vector with a label
+            """
+            if match_negatives:
+                return subproba_kl_div(score, label) - subproba_kl_div(
+                    score, torch.zeros(score.shape))
+            return subproba_kl_div(score, label)
+
+        negative_score = sum((
+            subproba_kl_div(self[arr], torch.zeros(self[arr].shape))
+            for arr in self.graph.arrows()
+        )) if match_negatives else 0
+
         result_graph = DirectedGraph[NodeType]()
         for src, tar in labels.edges:
             # add edge if necessary
@@ -253,12 +269,13 @@ class RelationCache(
             for name, label in labels[src][tar].items():
                 # evaluate candidate relationships
                 candidates = {
-                    arr: subproba_kl_div(score, label)
+                    arr: matcher(score, label)
                     for arr, score in scores.items()}
 
                 # save the best match in result graph
                 best_match = min(candidates, key=candidates.get)
                 result_graph[src][tar][name] = (
                     best_match, candidates[best_match])
-
-        return result_graph
+        if negative_score:
+            return result_graph, negative_score
+        return negative_score
