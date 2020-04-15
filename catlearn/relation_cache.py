@@ -223,7 +223,7 @@ class RelationCache(
 
     def match(
             self, labels: DirectedGraph[NodeType],
-            match_negatives=True) -> Tsor:
+            match_negatives: bool = True) -> Tsor:
         """
         Match the composition graph with a graph of labels. For each label
         vector, get the best match in the graph. if No match is found, set to
@@ -236,17 +236,23 @@ class RelationCache(
             """
             Used to compare a relation's score vector with a label
             """
+            kl_div = subproba_kl_div(score, label)
             if match_negatives:
-                return subproba_kl_div(score, label) - subproba_kl_div(
-                    score, torch.zeros(score.shape))
-            return subproba_kl_div(score, label)
-
-        negative_score = sum((
-            subproba_kl_div(self[arr], torch.zeros(self[arr].shape))
-            for arr in self.graph.arrows()
-        )) if match_negatives else 0
+                return kl_div - subproba_kl_div(score, torch.zeros(score.shape))
+            return kl_div
 
         result_graph = DirectedGraph[NodeType]()
+
+        if match_negatives:
+            for arr in self.arrows():
+                if not result_graph.has_edge(arr[0], arr[-1]):
+                    result_graph.add_edge(arr[0], arr[-1])
+                score = self[arr]
+                match = subproba_kl_div(score, torch.zeros(score.shape))
+                result_graph[arr[0]][arr[-1]][
+                    arr.derive()
+                ] = arr.derive(), match
+
         for src, tar in labels.edges:
             # add edge if necessary
             if not result_graph.has_edge(src, tar):
@@ -274,8 +280,13 @@ class RelationCache(
 
                 # save the best match in result graph
                 best_match = min(candidates, key=candidates.get)
+
+                negative_match = 0
+                if best_match in result_graph[src][tar]:
+                    # get negative match score and remove it from graph
+                    negative_match = result_graph[src][tar][best_match][1]
+                    del result_graph[src][tar][best_match]
+
                 result_graph[src][tar][name] = (
-                    best_match, candidates[best_match])
-        if negative_score:
-            return result_graph, negative_score
-        return negative_score
+                    best_match, candidates[best_match] + negative_match)
+        return result_graph
