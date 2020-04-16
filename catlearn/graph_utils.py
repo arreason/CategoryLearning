@@ -410,7 +410,7 @@ class GraphRandomFactory:
         """
         assert 0. <= pruning_factor <= 1., (
             "pruning factor should be between 0. and 1.")
-        assert len(weights) == len(__class__.OPS), (  # type: ignore
+        assert len(weights) == len(__class__.OPS), (  # type: ignore # pylint: disable=undefined-variable
             "Weights sequence should be of length 5, for"
             " or, and, add, mul, matmul operations respectively")
         assert 0 <= len(initial_graphs) <= nb_graphs, (

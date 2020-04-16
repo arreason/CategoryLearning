@@ -383,7 +383,7 @@ class TestDirectedGraph:
         """
         stringified_graph = graph.stringify()
         assert all(
-            set(node) <= __class__.ALLOWED_CHARS for node in stringified_graph)  # type: ignore
+            set(node) <= __class__.ALLOWED_CHARS for node in stringified_graph)  # type: ignore # pylint: disable=undefined-variable
         assert stringified_graph == expected_graph
 
     @staticmethod
