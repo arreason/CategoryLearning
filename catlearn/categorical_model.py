@@ -145,7 +145,7 @@ class DecisionCatModel:
             data_points: Mapping[NodeType, Tsor],
             relations: Iterable[CompositeArrow[NodeType, ArrowType]],
             labels: DirectedGraph[NodeType],
-            match_negatives: bool =True) -> Tuple[
+            match_negatives: bool = True) -> Tuple[
                 Tsor,
                 RelationCache[NodeType, ArrowType],
                 DirectedGraph[NodeType]]:
