@@ -250,7 +250,7 @@ class RelationCache(
                 score = self[arr]
                 match = subproba_kl_div(score, torch.zeros(score.shape))
                 result_graph[arr[0]][arr[-1]][
-                    arr.derive()
+                    None, arr.derive()
                 ] = arr.derive(), match
 
         for src, tar in labels.edges:
@@ -282,10 +282,10 @@ class RelationCache(
                 best_match = min(candidates, key=candidates.get)
 
                 negative_match = 0
-                if best_match in result_graph[src][tar]:
+                if (None, best_match) in result_graph[src][tar]:
                     # get negative match score and remove it from graph
-                    negative_match = result_graph[src][tar][best_match][1]
-                    del result_graph[src][tar][best_match]
+                    negative_match = result_graph[src][tar][None, best_match][1]
+                    del result_graph[src][tar][None, best_match]
 
                 result_graph[src][tar][name] = (
                     best_match, candidates[best_match] + negative_match)
