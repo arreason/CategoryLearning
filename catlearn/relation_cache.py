@@ -1,5 +1,6 @@
 from types import MappingProxyType
-from typing import Mapping, Callable, Iterable, Iterator, Generic, Tuple
+from typing import (
+    Mapping, Callable, Iterable, Iterator, Generic, Tuple, Hashable)
 from collections import abc
 
 import torch
@@ -13,6 +14,40 @@ from catlearn.composition_graph import (
 RelationEmbedding = Callable[[Tsor, Tsor, Tsor], Tsor]
 Scorer = Callable[[Tsor, Tsor, Tsor], Tsor]
 BinaryOp = Callable[[Tsor, Tsor], Tsor]
+
+
+class NegativeMatch(abc.Hashable):
+    """
+    A wrapper to tag negative matches in the result of a Cache match
+    against a label graph
+    """
+    def __init__(self, value: Hashable):
+        """
+        wrap value in a NegativeMatch object
+        """
+        super().__init__()
+        self._value = value
+
+    @property
+    def value(self) -> Hashable:
+        """
+        Get wrapped value
+        """
+        return self._value
+
+    def __hash__(self) -> int:
+        """
+        Get hash of NegativeMatch object
+        """
+        return hash(("NegativeMatch", self._value))
+
+    def __eq__(self, other_object: Hashable) -> bool:
+        """
+        Test equality with an other object
+        """
+        return (
+            isinstance(other_object, __class__)  # type: ignore # pylint: disable=undefined-variable
+            and self.value == other_object.value)
 
 
 class RelationCache(
@@ -250,7 +285,7 @@ class RelationCache(
                 score = self[arr]
                 match = subproba_kl_div(score, torch.zeros(score.shape))
                 result_graph[arr[0]][arr[-1]][
-                    None, arr.derive()
+                    NegativeMatch(arr.derive())
                 ] = arr.derive(), match
 
         for src, tar in labels.edges:
@@ -281,12 +316,11 @@ class RelationCache(
                 # save the best match in result graph
                 best_match = min(candidates, key=candidates.get)
 
-                negative_match = 0
-                if (None, best_match) in result_graph[src][tar]:
-                    # get negative match score and remove it from graph
-                    negative_match = result_graph[src][tar][None, best_match][1]
-                    del result_graph[src][tar][None, best_match]
-
                 result_graph[src][tar][name] = (
-                    best_match, candidates[best_match] + negative_match)
+                    best_match, subproba_kl_div(scores[best_match], label))
+
+                # remove arrow from negative match
+                # use pop in case it has already been removed (several matches)
+                result_graph[src][tar].pop(NegativeMatch(best_match), None)
+
         return result_graph
