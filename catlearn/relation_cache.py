@@ -1,6 +1,6 @@
 from types import MappingProxyType
 from typing import (
-    Mapping, Callable, Iterable, Iterator, Generic, Tuple, Hashable)
+    Mapping, Callable, Iterable, Generic, Tuple, Iterator, Hashable, Optional)
 from collections import abc
 
 import torch
@@ -14,6 +14,26 @@ from catlearn.composition_graph import (
 RelationEmbedding = Callable[[Tsor, Tsor, Tsor], Tsor]
 Scorer = Callable[[Tsor, Tsor, Tsor], Tsor]
 BinaryOp = Callable[[Tsor, Tsor], Tsor]
+
+
+def kl_match(
+        score: Tsor, label: Optional[Tsor] = None,
+        against_negative: bool = False) -> Tsor:
+    """
+    Kullback-liebler divergence based match. Two modes can be used:
+    if against_negative is True, will return the log kl ratio of the score
+    for the given label against match for negative label
+    if against_negative is False, will return the kl of the score
+    for the given label
+
+    Additionally if label is not provided or is None,
+    will match against negative label
+    """
+    label_vector = torch.zeros(score.shape) if label is None else label
+    kl_div = subproba_kl_div(score, label_vector)
+    if against_negative:
+        return kl_div - kl_match(score)
+    return kl_div
 
 
 class NegativeMatch(abc.Hashable):
@@ -267,26 +287,15 @@ class RelationCache(
         for matching. These relations
         are added to the cache.
         """
-        def matcher(score, label):
-            """
-            Used to compare a relation's score vector with a label
-            """
-            kl_div = subproba_kl_div(score, label)
-            if match_negatives:
-                return kl_div - subproba_kl_div(score, torch.zeros(score.shape))
-            return kl_div
-
         result_graph = DirectedGraph[NodeType]()
-
         if match_negatives:
             for arr in self.arrows():
                 if not result_graph.has_edge(arr[0], arr[-1]):
                     result_graph.add_edge(arr[0], arr[-1])
                 score = self[arr]
-                match = subproba_kl_div(score, torch.zeros(score.shape))
                 result_graph[arr[0]][arr[-1]][
                     NegativeMatch(arr.derive())
-                ] = arr.derive(), match
+                ] = arr.derive(), kl_match(score)
 
         for src, tar in labels.edges:
             # add edge if necessary
@@ -310,14 +319,15 @@ class RelationCache(
             for name, label in labels[src][tar].items():
                 # evaluate candidate relationships
                 candidates = {
-                    arr: matcher(score, label)
+                    arr: kl_match(
+                        score, label, against_negative=match_negatives)
                     for arr, score in scores.items()}
 
                 # save the best match in result graph
                 best_match = min(candidates, key=candidates.get)
 
-                result_graph[src][tar][name] = (
-                    best_match, subproba_kl_div(scores[best_match], label))
+                result_graph[src][tar][name] = (best_match, kl_match(
+                    scores[best_match], label, against_negative=False))
 
                 # remove arrow from negative match
                 # use pop in case it has already been removed (several matches)
