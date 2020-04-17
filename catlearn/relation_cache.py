@@ -69,6 +69,12 @@ class NegativeMatch(abc.Hashable):
             isinstance(other_object, __class__)  # type: ignore # pylint: disable=undefined-variable
             and self.value == other_object.value)
 
+    def __repr__(self):
+        """
+        String representation of a negative match
+        """
+        return f"{type(self).__name__}({self.value})"
+
 
 class RelationCache(
         Generic[NodeType, ArrowType],  # pylint: disable=unsubscriptable-object
