@@ -4,7 +4,7 @@
 """
 Tests for the categorical_model file.
 """
-from typing import Any, Dict, Iterable, List, Callable
+from typing import Any, Dict, Mapping, Iterable, List, Callable
 from functools import reduce
 from itertools import combinations, product
 from tempfile import NamedTemporaryFile
@@ -20,8 +20,9 @@ from catlearn.tensor_utils import subproba_kl_div, Tsor
 from catlearn.graph_utils import DirectedGraph
 from catlearn.composition_graph import CompositeArrow
 from catlearn.categorical_model import (
-    RelationModel, ScoringModel, RelationCache,
+    RelationModel, ScoringModel,
     DecisionCatModel, TrainableDecisionCatModel)
+from catlearn.relation_cache import RelationCache
 from catlearn.algebra_models import (
     Algebra, VectAlgebra, MatrixAlgebra, AffineAlgebra)
 
@@ -52,21 +53,13 @@ def nb_features(request: Any) -> int:
 
 @pytest.fixture(params=[1, 3])
 def nb_scores(request: Any) -> int:
-    """ Score vector dimension"""
+    """ Score vector dimension """
     return request.param
-
-
-@pytest.fixture(params=[1, 3])
-def nb_relations(request: Any) -> int:
-    """ number of relations in the model"""
-    return request.param
-
 
 @pytest.fixture(params=[3])
 def nb_labels(request: Any) -> int:
-    """ number of randomly chosen labels under which to match"""
+    """ number of randomly chosen labels under which to match """
     return request.param
-
 
 @pytest.fixture(params=[(1, 3)])
 def dim_rels(request: Any) -> int:
@@ -88,30 +81,33 @@ def reload(request) -> bool:
 
 class CustomRelation(RelationModel):
     """ Fake relations """
-    def __init__(self, nb_features: int, algebra: Algebra) -> None:
-        self.linear = nn.Linear(2 * nb_features, algebra.flatdim)
+    def __init__(self, nb_features: int, nb_labels: int, algebra: Algebra) -> None:
+        self.linear = nn.Linear(2 * nb_features + nb_labels, algebra.flatdim)
 
     @property
     def parameters(self) -> Callable[[], Iterable[Any]]:
         return self.linear.parameters
 
-    def __call__(self, x: Tsor, y: Tsor) -> Tsor:
+    def __call__(self, x: Tsor, y: Tsor, l: Tsor) -> Tsor:
         """ Compute x R y """
-        return self.linear(torch.cat((x, y), -1))
+        return self.linear(torch.cat((x, y, l), -1))
 
 
 @pytest.fixture
-def relations(
-        request: Any, nb_relations: int, nb_features: int,
-        algebra: Algebra) -> Dict[int, RelationModel]:
-    """ relation models """
+def relation(
+        nb_labels: int, nb_features: int,
+        algebra: Algebra) -> RelationModel:
+    """ relation model """
+    return CustomRelation(nb_features, nb_labels, algebra)
 
-
-
-    return {
-        idx: CustomRelation(nb_features, algebra)
-        for idx in range(nb_relations)}
-
+@pytest.fixture
+def label_universe(nb_labels: int) -> Mapping[int, Tsor]:
+    """ Universe of all possible label """
+    def one_hot(label: int):
+        enc = torch.zeros(nb_labels)
+        enc[label] = 1.0
+        return enc
+    return {i:one_hot(i) for i in range(nb_labels)}
 
 class CustomScore(ScoringModel):
     """ Fake score """
@@ -125,7 +121,6 @@ class CustomScore(ScoringModel):
     @property
     def parameters(self) -> Callable[[], Iterable[Any]]:
         return self.linear.parameters
-
 
     def __call__(self, src: Tsor, dst: Tsor, rel: Tsor) -> Tsor:
         """ Compute S(src, dst, rel) """
@@ -141,11 +136,11 @@ def scoring(
 
 
 @pytest.fixture(params=[1, 5])
-def arrow(request: Any, nb_relations: int) -> CompositeArrow[int, int]:
+def arrow(request: Any, label_universe: Mapping[int, Tsor]) -> CompositeArrow[int, Tsor]:
     """Composite arrow for tests"""
     return CompositeArrow(
         range(1 + request.param),
-        random.choices(range(nb_relations), k=request.param))
+        random.choices(list(label_universe), k=request.param))
 
 
 def get_labels(
@@ -168,13 +163,16 @@ def get_labels(
 
 
 def get_trainable_model(
-        relations: Dict[int, RelationModel],
-        scoring: ScoringModel, algebra: Algebra) -> TrainableDecisionCatModel:
+        relation: RelationModel,
+        label_universe: Mapping[int, Tsor],
+        scoring: ScoringModel,
+        algebra: Algebra) -> TrainableDecisionCatModel:
     """
     Prepare a trainable decision model
     """
     return TrainableDecisionCatModel(
-        relations, scoring, algebra, torch.optim.SGD, lr=0.001)
+        relation, label_universe,
+        scoring, algebra, torch.optim.SGD, lr=0.001)
 
 
 class TestRelationCache:
@@ -183,34 +181,38 @@ class TestRelationCache:
     """
     @staticmethod
     def get_cache(
-            relations: Dict[int, RelationModel],
-            scoring: ScoringModel, algebra: Algebra,
+            relation: RelationModel,
+            label_universe: Mapping[int, Tsor],
+            scoring: ScoringModel,
+            algebra: Algebra,
             data_dim: int,
-            *arr: CompositeArrow[int, int]) -> RelationCache:
+            *arr: CompositeArrow[int, Tsor]) -> RelationCache:
         """
         get a relation cache, initialized with random data and one composite
         arrow if given (otherwise it is empty)
         """
         if arr:
             datas = {idx: torch.rand(data_dim) for idx in set().union(*arr)}  # type: ignore
-            return RelationCache[int, int](
-                relations, scoring, algebra.comp, datas, arr)
+        else:
+            datas = {}
+            arr = ()
 
-        return RelationCache[int, int](
-            relations, scoring, algebra.comp, {}, ())
+        return RelationCache[int, Tsor](
+            relation, label_universe, scoring, algebra.comp, datas, arr)
 
     @staticmethod
     def test_relation(
             nb_features: int,
-            relations: Dict[int, RelationModel],
+            relation: RelationModel,
+            label_universe: Mapping[int, Tsor],
             scoring: ScoringModel, algebra: Algebra,
-            arrow: CompositeArrow[int, int]) -> None:
+            arrow: CompositeArrow[int, Tsor]) -> None:
         """
         Test stored value of relation
         """
         # create cache with one composite arrow
         cache = TestRelationCache.get_cache(
-            relations, scoring, algebra, nb_features, arrow)
+            relation, label_universe, scoring, algebra, nb_features, arrow)
 
         # compute expected value of corresponding relation
         expected_result = reduce(
@@ -226,15 +228,16 @@ class TestRelationCache:
     @staticmethod
     def test_score(
             nb_features: int,
-            relations: Dict[int, RelationModel],
+            relation: RelationModel,
+            label_universe: Mapping[int, Tsor],
             scoring: ScoringModel, algebra: Algebra,
-            arrow: CompositeArrow[int, int]) -> None:
+            arrow: CompositeArrow[int, Tsor]) -> None:
         """
         Test stored value of score
         """
         # create cache with one composite arrow
         cache = TestRelationCache.get_cache(
-            relations, scoring, algebra, nb_features, arrow)
+            relation, label_universe, scoring, algebra, nb_features, arrow)
 
         # collect minimum of all total scores of parts of arrow
         # note that actual score of arrow is also taken in the loop
@@ -262,15 +265,17 @@ class TestRelationCache:
             nb_features: int,
             nb_labels: int,
             nb_scores: int,
-            relations: Dict[int, RelationModel],
+            relation: RelationModel,
+            label_universe: Mapping[int, Tsor],
             scoring: ScoringModel, algebra: Algebra,
-            arrow: CompositeArrow[int, int]) -> None:
+            arrow: CompositeArrow[int, Tsor]) -> None:
         """
         Test for graph matching
         """
         # create cache with one composite arrow
         cache = TestRelationCache.get_cache(
-            relations, scoring, algebra, nb_features, arrow)
+            relation, label_universe,
+            scoring, algebra, nb_features, arrow)
 
         # create label graph
         labels = get_labels(arrow, nb_scores, nb_labels)
@@ -294,10 +299,11 @@ class TestRelationCache:
                         CompositeArrow(arr): scoring(
                             cache.data(CompositeArrow(src)),
                             cache.data(CompositeArrow(tar)),
-                            relations[arr](
+                            relation(
                                 cache.data(CompositeArrow(src)),
-                                cache.data(CompositeArrow(tar))))
-                        for arr in cache.generators}
+                                cache.data(CompositeArrow(tar)),
+                                arr))
+                        for arr in cache.label_universe}
 
                 kldivs = {
                     idx: subproba_kl_div(score, value)
@@ -316,15 +322,19 @@ class TestDecisionCatModel:
     """ Tests for DecisionCatModel class"""
     @staticmethod
     def test_cost(
-            arrow: CompositeArrow[int, int],
-            relations: Dict[int, RelationModel], scoring: ScoringModel,
+            arrow: CompositeArrow[int, Tsor],
+            relation: RelationModel,
+            label_universe: Mapping[int, Tsor],
+            scoring: ScoringModel,
             algebra: Algebra,
-            nb_features: int, nb_labels: int, nb_scores: int) -> None:
+            nb_features: int,
+            nb_labels: int,
+            nb_scores: int) -> None:
         """
         Test cost function of decision cat model
         """
         # create model
-        model = DecisionCatModel(relations, scoring, algebra)
+        model = DecisionCatModel(relation, label_universe, scoring, algebra)
 
         # generate datapoints for arrow
         datas = {node: torch.rand(nb_features) for node in arrow}
@@ -340,9 +350,8 @@ class TestDecisionCatModel:
         assert cost >= 0
 
         # compute cache and matching for comparison
-        expected_cache = RelationCache[int, int](
-            model.relations, model.score,
-            model.algebra.comp, datas, [arrow])
+        expected_cache = RelationCache[int, Tsor](
+            relation, label_universe, model.score, model.algebra.comp, datas, [arrow])
         expected_matched = expected_cache.match(labels)
 
         # verify obtained cache and matching are identical to expected
@@ -366,10 +375,14 @@ class TestTrainableDecisionCatModel:
 
     @staticmethod
     def test_train_without_update(
-            arrow: CompositeArrow[int, int],
-            relations: Dict[int, RelationModel], scoring: ScoringModel,
-            algebra: Algebra, nb_features: int,
-            nb_labels: int, nb_scores: int,
+            arrow: CompositeArrow[int, Tsor],
+            relation: RelationModel,
+            label_universe: Mapping[int, Tsor],
+            scoring: ScoringModel,
+            algebra: Algebra,
+            nb_features: int,
+            nb_labels: int,
+            nb_scores: int,
             reload: bool) -> None:
         """
         Test training, verifying that not activating updates does:
@@ -377,7 +390,7 @@ class TestTrainableDecisionCatModel:
             - lead to same results of evaluation
         """
         # get model and its parameters
-        model = get_trainable_model(relations, scoring, algebra)
+        model = get_trainable_model(relation, label_universe, scoring, algebra)
 
         # generate datapoints for arrow
         datas = {node: torch.rand(nb_features) for node in arrow}
@@ -415,17 +428,21 @@ class TestTrainableDecisionCatModel:
     @staticmethod
     @pytest.mark.flaky(reruns=FLAKY_TEST_RETRY)
     def test_train_with_update(
-            arrow: CompositeArrow[int, int],
-            relations: Dict[int, RelationModel], scoring: ScoringModel,
+            arrow: CompositeArrow[int, Tsor],
+            relation: RelationModel,
+            label_universe: Mapping[int, Tsor],
+            scoring: ScoringModel,
             algebra: Algebra,
-            nb_features: int, nb_labels: int,
-            nb_steps: int, nb_scores: int) -> None:
+            nb_features: int,
+            nb_labels: int,
+            nb_steps: int,
+            nb_scores: int) -> None:
         """
         Test training, verifying that overerall cost on a batch lowers
         during training when using same data
         """
         # get model
-        model = get_trainable_model(relations, scoring, algebra)
+        model = get_trainable_model(relation, label_universe, scoring, algebra)
 
         # generate datapoints for arrow
         datas = {node: torch.rand(nb_features) for node in arrow}
