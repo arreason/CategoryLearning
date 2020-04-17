@@ -1,11 +1,4 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Created on Sun Mar 24 20:32:59 2019
-
-@author: christophe_c
-"""
-from typing import Mapping, Callable, Iterable, Generic, Tuple, Iterator
+from typing import Mapping, Callable, Iterable, Iterator, Generic, Tuple
 from collections import abc
 
 import torch
@@ -16,7 +9,7 @@ from catlearn.composition_graph import (
     ArrowType, CompositeArrow, CompositionGraph)
 
 # Some convenient type aliases
-GeneratorMapping = Mapping[ArrowType, Callable[[Tsor, Tsor], Tsor]]
+RelationEmbedding = Callable[[Tsor, Tsor, Tsor], Tsor]
 Scorer = Callable[[Tsor, Tsor, Tsor], Tsor]
 BinaryOp = Callable[[Tsor, Tsor], Tsor]
 
@@ -39,7 +32,7 @@ class RelationCache(
         """
         def graph_comp(
                 graph: CompositionGraph[NodeType, ArrowType, Tsor],
-                arrow: CompositeArrow[ArrowType, NodeType]
+                arrow: CompositeArrow[NodeType, ArrowType]
             ) -> Tuple[Tsor, Tsor]:
             """
             compute value associated to given arrow, knowing using values
@@ -47,8 +40,9 @@ class RelationCache(
             """
             # case of length 1
             if len(arrow) == 1:
-                rel_value = self.generators[arrow.arrows[0]](
-                    self._datas[arrow[0]], self._datas[arrow[-1]])  # type: ignore
+                rel_value = self.relation_embed(
+                    self._datas[arrow[0]], self._datas[arrow[-1]],
+                    self.label_universe[arrow.arrows[0]])  # type: ignore
                 rel_score = self._scorer(
                     self._datas[arrow[0]], self._datas[arrow[-1]],  # type: ignore
                     rel_value)
@@ -87,7 +81,8 @@ class RelationCache(
 
     def __init__(
             self,
-            generators: GeneratorMapping,
+            rel_embed: RelationEmbedding,
+            label_universe: Mapping[ArrowType, Tsor],
             scorer: Scorer,
             comp: BinaryOp,
             datas: Mapping[NodeType, Tsor],
@@ -95,10 +90,10 @@ class RelationCache(
             epsilon: float = DEFAULT_EPSILON) -> None:
         """
         Initialize a new cache of relations, from:
-           generators:  mapping whose:
-               - keys are possible arrow names
-               - values are functions taking a pair of source, target data
-                   points as input and returning a relation value
+           rel_embed: a relation embedding function returning a tensor from
+               from 2 points and a tensor-valued label
+           label_universe: mapping from the set of possible relation label to
+               a suitable form for rel_embed
            scorer:  a score function returning a score vector from 2 points
                and 1 relation value,
            comp: a composition operation returning a relation value from
@@ -116,7 +111,8 @@ class RelationCache(
         self._datas = dict(datas)
 
         # memorize existing arrow model names
-        self.generators = generators
+        self.relation_embed = rel_embed
+        self.label_universe = label_universe
 
         # register scorer and composition operation
         self._scorer = scorer
@@ -134,6 +130,7 @@ class RelationCache(
         # fill the cache with provided arrows
         for arrow in arrows:
             self.add(arrow)
+
 
     @property
     def causality_cost(self):
@@ -170,7 +167,7 @@ class RelationCache(
             raise ValueError("Cannot get the score of an arrow of length 0")
         return self._graph[arrow][0]
 
-    def __iter__(self) -> Iterator[CompositeArrow]:
+    def __iter__(self) -> Iterator[CompositeArrow[NodeType, ArrowType]]:
         """
         Iterate through arrows contained in the cache
         """
@@ -236,7 +233,7 @@ class RelationCache(
             if (
                     not self.graph.has_edge(src, tar)
                     or not self.graph[src][tar]):
-                for arr in self.generators:
+                for arr in self.label_universe:
                     self.add(CompositeArrow([src, tar], [arr]))
 
             # get scores of existing arrows from src to tar
