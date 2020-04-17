@@ -142,6 +142,10 @@ def arrow(request: Any, label_universe: Mapping[int, Tsor]) -> CompositeArrow[in
         range(1 + request.param),
         random.choices(list(label_universe), k=request.param))
 
+@pytest.fixture(params=[True, False])
+def match_negatives(request: Any):
+    """Wether negative matches should be counted"""
+    return request.param
 
 def get_labels(
         nodes: Iterable[int],
@@ -268,7 +272,8 @@ class TestRelationCache:
             relation: RelationModel,
             label_universe: Mapping[int, Tsor],
             scoring: ScoringModel, algebra: Algebra,
-            arrow: CompositeArrow[int, Tsor]) -> None:
+            arrow: CompositeArrow[int, int],
+            match_negatives: bool) -> None:
         """
         Test for graph matching
         """
@@ -281,7 +286,7 @@ class TestRelationCache:
         labels = get_labels(arrow, nb_scores, nb_labels)
 
         # match label graph against cache
-        matches = cache.match(labels)
+        matches = cache.match(labels, match_negatives=match_negatives)
 
         # check that matches graph contains everything necessary
         for (src, tar), edge_labels in labels.edges().items():  # pylint: disable=no-member
@@ -306,11 +311,16 @@ class TestRelationCache:
                         for arr in cache.label_universe}
 
                 kldivs = {
-                    idx: subproba_kl_div(score, value)
+                    idx: (subproba_kl_div(score, value)
+                        - float(match_negatives) * subproba_kl_div(
+                            score, torch.zeros(score.shape)
+                        ))
                     for idx, score in available.items()}
 
                 expected_match = min(kldivs, key=kldivs.get)
-                expected_cost = kldivs[expected_match]
+                expected_score = available[expected_match]
+                expected_cost = subproba_kl_div(
+                    expected_score, value)
 
                 assert matches[src][tar][label][0] == expected_match
                 assert (
