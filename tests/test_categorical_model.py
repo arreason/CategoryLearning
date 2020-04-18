@@ -19,6 +19,7 @@ import pytest
 from catlearn.tensor_utils import subproba_kl_div, Tsor
 from catlearn.graph_utils import DirectedGraph
 from catlearn.composition_graph import CompositeArrow
+from catlearn.relation_cache import RelationCache, NegativeMatch
 from catlearn.categorical_model import (
     RelationModel, ScoringModel,
     DecisionCatModel, TrainableDecisionCatModel)
@@ -311,10 +312,11 @@ class TestRelationCache:
                         for arr in cache.label_universe}
 
                 kldivs = {
-                    idx: (subproba_kl_div(score, value)
+                    idx: (
+                        subproba_kl_div(score, value)
                         - float(match_negatives) * subproba_kl_div(
                             score, torch.zeros(score.shape)
-                        ))
+                            ))
                     for idx, score in available.items()}
 
                 expected_match = min(kldivs, key=kldivs.get)
@@ -326,6 +328,24 @@ class TestRelationCache:
                 assert (
                     (matches[src][tar][label][1] - expected_cost).abs()
                     <= TEST_EPSILON)
+
+            # check that negatives are matched if match_negatives is true
+            if match_negatives:
+                positives = set(
+                    matches[src][tar][label][0] for label in edge_labels)
+                expected_negatives = set(
+                    arr.derive() for arr in cache.arrows(src, tar)) - positives
+                print(expected_negatives)
+                for negative in expected_negatives:
+                    expected_label = NegativeMatch(negative)
+                    assert expected_label in matches[src][tar]
+
+                    score = cache[negative.suspend(src, tar)]
+                    expected_cost = subproba_kl_div(
+                        score, torch.zeros(score.shape))
+                    assert (
+                        (matches[src][tar][expected_label][1] - expected_cost)
+                        <= TEST_EPSILON)
 
 
 class TestDecisionCatModel:
