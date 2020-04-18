@@ -313,8 +313,18 @@ class RelationCache(
             if (
                     not self.graph.has_edge(src, tar)
                     or not self.graph[src][tar]):
+
                 for arr in self.label_universe:
-                    self.add(CompositeArrow([src, tar], [arr]))
+                    # add arrow
+                    new_arr = CompositeArrow([src, tar], [arr])
+                    self.add(new_arr)
+
+                    # match new arrow against negative label
+                    new_score = kl_match(self[new_arr])
+                    new_label = new_arr.derive()
+                    result_graph[src][tar][
+                        NegativeMatch(new_label)
+                    ] = new_label, new_score
 
             # get scores of existing arrows from src to tar
             scores = {
