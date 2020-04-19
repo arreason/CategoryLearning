@@ -209,6 +209,16 @@ class TestDirectedGraph:
                 0: [1, 2, 3, 4], 2: [3, 4, 6], 6: [5, 9, 11]})),
             dict(graph=DirectedGraph({0: []})),
             dict(graph=DirectedGraph({}))
+            ],
+        "test_dualize_relations": [
+            dict(graph=DirectedGraph({0: [1], 1: []}),
+                 expected_graph=DirectedGraph({0: [1], 1: []})),
+            dict(graph=DirectedGraph({0: {1: {"label": 1}}, 1: []}),
+                 expected_graph=DirectedGraph({
+                    0: {1: {
+                        ("label", False): 1,
+			("label", True): 1}},
+                    1: []}))
             ]
         }
 
@@ -396,6 +406,15 @@ class TestDirectedGraph:
             pruning_factor, random_generator=second_random_generator)
 
         assert first_pruned_graph == second_pruned_graph
+
+    @staticmethod
+    def test_dualize_relations(
+            graph: DirectedGraph, expected_graph: DirectedGraph) -> None:
+        """
+        test dual property
+        """
+        result = graph.dualize_relations()
+        assert result == expected_graph
 
 
 class TestAcyclicDirectedGraph:

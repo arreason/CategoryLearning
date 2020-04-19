@@ -145,21 +145,22 @@ def arrow(request: Any, label_universe: Mapping[int, Tsor]) -> CompositeArrow[in
 
 def get_labels(
         nodes: Iterable[int],
-        nb_scores: int, nb_labels: int) -> DirectedGraph[int]:
+        nb_scores: int,
+        nb_labels: int) -> DirectedGraph[int]:
     """
     Generate a random label graph
     """
-    labels = DirectedGraph[int]()
+    graph = DirectedGraph[int]()
     sources: List[int] = random.choices(list(nodes), k=nb_labels)
     targets: List[int] = random.choices(list(nodes), k=nb_labels)
+    labels: List[int] = random.choices(list(range(nb_labels)), k=nb_labels**2)
 
     for idx, (src, tar) in enumerate(product(sources, targets)):
-        labels.add_edge(src, tar)
+        graph.add_edge(src, tar)
         scores = torch.softmax(
             torch.rand(1 + nb_scores), dim=-1)[..., :-1]
-        labels[src][tar][idx] = scores
-
-    return labels
+        graph[src][tar][labels[idx]] = scores
+    return graph
 
 
 def get_trainable_model(
@@ -173,7 +174,6 @@ def get_trainable_model(
     return TrainableDecisionCatModel(
         relation, label_universe,
         scoring, algebra, torch.optim.SGD, lr=0.001)
-
 
 class TestRelationCache:
     """
