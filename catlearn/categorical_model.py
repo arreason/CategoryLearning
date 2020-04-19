@@ -5,6 +5,7 @@ for the categorical model
 
 from __future__ import annotations
 from itertools import chain
+from types import MappingProxyType
 from typing import Any, Callable, IO, Iterable, Mapping, Tuple, Union
 
 import torch
@@ -104,6 +105,13 @@ class DecisionCatModel:
         access the algebra of the decision model
         """
         return self._algebra_model
+
+    @property
+    def label_universe(self) -> Mapping[ArrowType, Tsor]:
+        """
+        access the label encoding
+        """
+        return MappingProxyType(self._label_universe)
 
     def score(
             self, source: Tsor, target: Tsor,

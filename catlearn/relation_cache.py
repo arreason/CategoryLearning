@@ -1,3 +1,4 @@
+from types import MappingProxyType
 from typing import Mapping, Callable, Iterable, Iterator, Generic, Tuple
 from collections import abc
 
@@ -112,7 +113,7 @@ class RelationCache(
 
         # memorize existing arrow model names
         self.relation_embed = rel_embed
-        self.label_universe = label_universe
+        self._label_universe = label_universe
 
         # register scorer and composition operation
         self._scorer = scorer
@@ -153,6 +154,13 @@ class RelationCache(
 
         # if arrow has length 0, return data corresponding to its node
         return self._datas[arrow[0]]  # type: ignore
+
+    @property
+    def label_universe(self) -> Mapping[ArrowType, Tsor]:
+        """
+        access the label encoding
+        """
+        return MappingProxyType(self._label_universe)
 
     def __getitem__(
             self, arrow: CompositeArrow[NodeType, ArrowType]
