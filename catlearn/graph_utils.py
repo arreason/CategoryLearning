@@ -69,6 +69,26 @@ class DirectedGraph(Generic[NodeType], DiGraph, abc.MutableMapping):  # pylint: 
         """
         return self.reverse(copy=False)
 
+    def dualize_relations(self) -> DirectedGraph[NodeType]:
+        """
+        returns the dually augmented graph
+
+        No-op if graph has no labels.
+        For each labelled edge (src, dst, label), the resulting
+        graph will have 2 edges:
+            * (src, dst, (label, False)) : the original edge
+            * (src, dst, (label, True)): the dual label
+        Comment: the label value is copied between an edge and its dual
+        """
+        dualg = DirectedGraph()
+        for src, dst in self.edges():
+            dualg.add_edge(src, dst)
+            for label, value in self[src][dst].items():
+                dualg[src][dst][(label, False)] = value
+                dualg[src][dst][(label, True)] = value  # Dual
+        return dualg
+
+
     def under(self, root: NodeType) -> FrozenSet[NodeType]:
         """
         Returns the set of all nodes acessible from given root,

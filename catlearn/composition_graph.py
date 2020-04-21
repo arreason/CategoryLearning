@@ -230,7 +230,7 @@ class CompositionGraph(Generic[NodeType, ArrowType, AlgebraType], abc.Mapping): 
             comp: Callable[
                 [
                     CompositionGraph[NodeType, ArrowType, AlgebraType],
-                    CompositeArrow],
+                    CompositeArrow[NodeType, ArrowType]],
                 AlgebraType],
             arrows: Iterable[
                 CompositeArrow[NodeType, ArrowType]] = iter(())) -> None:
@@ -258,7 +258,7 @@ class CompositionGraph(Generic[NodeType, ArrowType, AlgebraType], abc.Mapping): 
         """
         return self._graph
 
-    def add(self, arrow: CompositeArrow) -> None:
+    def add(self, arrow: CompositeArrow[NodeType, ArrowType]) -> None:
         """
         Add the given composite arrow to the composition graph
         """
@@ -330,7 +330,7 @@ class CompositionGraph(Generic[NodeType, ArrowType, AlgebraType], abc.Mapping): 
 
         return iter(())
 
-    def __iter__(self) -> Iterator[CompositeArrow]:
+    def __iter__(self) -> Iterator[CompositeArrow[NodeType, ArrowType]]:
         """
         Return an iterator over all composite arrows of the structure
         """

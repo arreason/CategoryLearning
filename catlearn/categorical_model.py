@@ -1,8 +1,4 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
-Created on Sat Apr 28 12:12:01 2018
-@author: christophe_c
 This file introduces the factories for creating the necessary cost functions
 for the categorical model
 """
@@ -10,14 +6,13 @@ for the categorical model
 from __future__ import annotations
 from itertools import chain
 from types import MappingProxyType
-from typing import Any, Callable, Dict, IO, Iterable, Mapping, Tuple, Union
+from typing import Any, Callable, IO, Iterable, Mapping, Tuple, Union
 
 import torch
 from torch.optim import Optimizer
 
 from catlearn.tensor_utils import (
-    DEFAULT_EPSILON, Tsor,
-    remap_subproba)
+    DEFAULT_EPSILON, Tsor, remap_subproba)
 from catlearn.graph_utils import DirectedGraph, NodeType
 from catlearn.composition_graph import CompositeArrow, ArrowType
 from catlearn.relation_cache import RelationCache
@@ -42,9 +37,9 @@ class AbstractModel:
 class RelationModel(AbstractModel):
     def __call__(self,
                  src: Tsor,
-                 dst: Tsor) -> Tsor:
+                 dst: Tsor,
+                 rel: ArrowType) -> Tsor:
         raise NotImplementedError()
-
 
 class ScoringModel(AbstractModel):
     def __call__(self,
@@ -52,8 +47,8 @@ class ScoringModel(AbstractModel):
                  dst: Tsor,
                  rel: Tsor) -> Tsor:
         raise NotImplementedError()
-# pylint: enable=missing-docstring
 
+# pylint: enable=missing-docstring
 
 class DecisionCatModel:
     """
@@ -71,8 +66,10 @@ class DecisionCatModel:
     on batch dimensions for everything to work fine
     !!!
     Constructor takes as input:
-        relation_models: a collection of relation models (Sequence[Callable]),
-                taking a couple of 2 datapoints and returning a relation vector
+        relation_model: a model taking 2 datapoints and an encoded relation label,
+                returning a relation vector
+        label_universe: mapping from the set of possible relation label to
+                a suitable form for relation_model
         scoring_model: a single scoring model (Callable), taking a couple of
                 datapoints and a relation between them, and returning
                 confidence scores. Each entry in output tensor should be in
@@ -86,7 +83,8 @@ class DecisionCatModel:
 
     def __init__(
             self,
-            relation_models: Mapping[ArrowType, RelationModel],
+            relation_model: RelationModel,
+            label_universe: Mapping[ArrowType, Tsor],
             scoring_model: ScoringModel,
             algebra_model: Algebra,
             epsilon: float = DEFAULT_EPSILON) -> None:
@@ -95,7 +93,8 @@ class DecisionCatModel:
         """
         assert epsilon > 0., "epsilon should be strictly positive"
 
-        self._relation_models = relation_models
+        self._relation_model = relation_model
+        self._label_universe = label_universe
         self._scoring_model = scoring_model
         self._algebra_model = algebra_model
         self.epsilon = epsilon
@@ -108,11 +107,11 @@ class DecisionCatModel:
         return self._algebra_model
 
     @property
-    def relations(self) -> Mapping[ArrowType, RelationModel]:
+    def label_universe(self) -> Mapping[ArrowType, Tsor]:
         """
-        access the mapping to relation models
+        access the label encoding
         """
-        return MappingProxyType(self._relation_models)
+        return MappingProxyType(self._label_universe)
 
     def score(
             self, source: Tsor, target: Tsor,
@@ -138,8 +137,8 @@ class DecisionCatModel:
         generate a batch from a list of relations and datas
         """
         return RelationCache(
-            self.relations, self.score,
-            self.algebra.comp, data_points, relations)
+            self._relation_model, self._label_universe,
+            self.score, self.algebra.comp, data_points, relations)
 
     def cost(
             self,
@@ -192,8 +191,10 @@ class TrainableDecisionCatModel(DecisionCatModel):
     torch modules.
 
     Constructor takes as input:
-        relation_models: a collection of relation models (Sequence[Callable]),
-                taking a couple of 2 datapoints and returning a relation vector
+        relation_model: a model taking 2 datapoints and an encoded relation label,
+                returning a relation vector
+        label_universe: mapping from the set of possible relation label to
+               a suitable form for relation_model
         scoring_model: a single scoring model (Callable), taking a couple of
                 datapoints and a relation between them, and returning
                 confidence scores. Each entry in output tensor should be in
@@ -210,7 +211,8 @@ class TrainableDecisionCatModel(DecisionCatModel):
 
     def __init__(
             self,
-            relation_models: Mapping[ArrowType, RelationModel],
+            relation_model: RelationModel,
+            label_universe: Mapping[ArrowType, Tsor],
             scoring_model: ScoringModel,
             algebra_model: Algebra,
             optimizer: Optimizer,
@@ -220,8 +222,8 @@ class TrainableDecisionCatModel(DecisionCatModel):
         instanciate a new model
         """
         DecisionCatModel.__init__(
-            self, relation_models, scoring_model,
-            algebra_model=algebra_model,
+            self, relation_model, label_universe,
+            scoring_model, algebra_model=algebra_model,
             epsilon=epsilon)
 
         self._cost = torch.zeros(())
@@ -242,8 +244,7 @@ class TrainableDecisionCatModel(DecisionCatModel):
         """
         returns an iterator over parameters of the model
         """
-        return lambda: chain(*(rel.parameters()
-                               for rel in self.relations.values()),
+        return lambda: chain(self._relation_model.parameters(),
                              self._scoring_model.parameters())
 
     def freeze(self) -> None:
@@ -251,16 +252,14 @@ class TrainableDecisionCatModel(DecisionCatModel):
         Freeze all adjustable weights (score and relations)
         """
         self._scoring_model.freeze()
-        for rel in self.relations.values():
-            rel.freeze()
+        self._relation_model.freeze()
 
     def unfreeze(self) -> None:
         """
         Inverse of freeze method
         """
         self._scoring_model.unfreeze()
-        for rel in self.relations.values():
-            rel.unfreeze()
+        self._relation_model.unfreeze()
 
     @property
     def total_cost(self) -> Tsor:
