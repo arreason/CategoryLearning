@@ -334,7 +334,6 @@ class TestRelationCache:
                     matches[src][tar][label][0] for label in edge_labels)
                 expected_negatives = set(
                     arr.derive() for arr in cache.arrows(src, tar)) - positives
-                print(expected_negatives)
                 for negative in expected_negatives:
                     expected_label = NegativeMatch(negative)
                     assert expected_label in matches[src][tar]
