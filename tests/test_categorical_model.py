@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 # pylint: disable=redefined-outer-name, invalid-name, abstract-method, no-self-use
+# pylint: disable=too-few-public-methods,too-many-locals
 """
 Tests for the categorical_model file.
 """
@@ -23,11 +24,8 @@ from catlearn.relation_cache import RelationCache, NegativeMatch
 from catlearn.categorical_model import (
     RelationModel, ScoringModel,
     DecisionCatModel, TrainableDecisionCatModel)
-from catlearn.relation_cache import RelationCache
 from catlearn.algebra_models import (
     Algebra, VectAlgebra, MatrixAlgebra, AffineAlgebra)
-
-from tests.test_tools import pytest_generate_tests
 
 
 # List of algebras to verify
