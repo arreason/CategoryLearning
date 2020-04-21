@@ -14,6 +14,8 @@ import pytest
 
 from catlearn.composition_graph import CompositeArrow, CompositionGraph
 
+from tests.test_tools import pytest_generate_tests
+
 
 @pytest.fixture(params=[3, 5, 7])
 def to_add(request: Any) -> CompositeArrow[str, str]:

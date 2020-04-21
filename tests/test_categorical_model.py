@@ -16,6 +16,7 @@ import torch
 from torch import nn
 
 import pytest
+from tests.test_tools import pytest_generate_tests
 
 from catlearn.tensor_utils import subproba_kl_div, Tsor
 from catlearn.graph_utils import DirectedGraph
