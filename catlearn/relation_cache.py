@@ -20,9 +20,10 @@ def kl_match(
         score: Tsor, label: Optional[Tsor] = None,
         against_negative: bool = False) -> Tsor:
     """
-    Kullback-liebler divergence based match. Two modes can be used:
-    if against_negative is True, will return the log kl ratio of the score
-    for the given label against match for negative label
+    Kullback-Leibler divergence based match. Two modes can be used:
+    if against_negative is True, will return the the log of the ratio of the
+    kl of the score against the label and the kl of the score against
+    the negative_label
     if against_negative is False, will return the kl of the score
     for the given label
 
@@ -32,7 +33,7 @@ def kl_match(
     label_vector = torch.zeros(score.shape) if label is None else label
     kl_div = subproba_kl_div(score, label_vector)
     if against_negative:
-        return kl_div - kl_match(score)
+        return kl_div - kl_match(score, label=None, against_negative=False)
     return kl_div
 
 
@@ -301,7 +302,8 @@ class RelationCache(
                 score = self[arr]
                 result_graph[arr[0]][arr[-1]][
                     NegativeMatch(arr.derive())
-                ] = arr.derive(), kl_match(score)
+                ] = arr.derive(), kl_match(
+                    score, label=None, against_negative=False)
 
         for src, tar in labels.edges:
             # add edge if necessary
@@ -320,7 +322,8 @@ class RelationCache(
                     self.add(new_arr)
 
                     # match new arrow against negative label
-                    new_score = kl_match(self[new_arr])
+                    new_score = kl_match(
+                        self[new_arr], label=None, against_negative=False)
                     new_label = new_arr.derive()
                     result_graph[src][tar][
                         NegativeMatch(new_label)
