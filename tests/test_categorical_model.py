@@ -357,7 +357,8 @@ class TestDecisionCatModel:
             algebra: Algebra,
             nb_features: int,
             nb_labels: int,
-            nb_scores: int) -> None:
+            nb_scores: int,
+            match_negatives: bool) -> None:
         """
         Test cost function of decision cat model
         """
@@ -371,7 +372,8 @@ class TestDecisionCatModel:
         labels = get_labels(arrow, nb_scores, nb_labels)
 
         # compute cost. we want to verify all goes smoothly
-        cost, cache, matched = model.cost(datas, [arrow], labels)
+        cost, cache, matched = model.cost(
+            datas, [arrow], labels, match_negatives=match_negatives)
 
         # the resulting cost should be a positive finite real number
         assert torch.isfinite(cost)
@@ -380,7 +382,8 @@ class TestDecisionCatModel:
         # compute cache and matching for comparison
         expected_cache = RelationCache[int, Tsor](
             relation, label_universe, model.score, model.algebra.comp, datas, [arrow])
-        expected_matched = expected_cache.match(labels)
+        expected_matched = expected_cache.match(
+            labels, match_negatives=match_negatives)
 
         # verify obtained cache and matching are identical to expected
         assert set(cache.keys()) == set(expected_cache.keys())
@@ -411,7 +414,8 @@ class TestTrainableDecisionCatModel:
             nb_features: int,
             nb_labels: int,
             nb_scores: int,
-            reload: bool) -> None:
+            reload: bool,
+            match_negatives: bool) -> None:
         """
         Test training, verifying that not activating updates does:
             - conserve gradients
@@ -428,7 +432,7 @@ class TestTrainableDecisionCatModel:
 
         # go through one train stage
         expected_cache, expected_matched = model.train(
-            datas, [arrow], labels, step=False)
+            datas, [arrow], labels, step=False, match_negatives=match_negatives)
 
         # reset model, extract everything again
         if reload:
@@ -438,7 +442,7 @@ class TestTrainableDecisionCatModel:
         else:
             model.reset()
         cache, matched = model.train(
-            datas, [arrow], labels, step=False)
+            datas, [arrow], labels, step=False, match_negatives=match_negatives)
 
         # verify obtained cache and matching are identical to expected
         assert set(cache.keys()) == set(expected_cache.keys())
@@ -464,7 +468,8 @@ class TestTrainableDecisionCatModel:
             nb_features: int,
             nb_labels: int,
             nb_steps: int,
-            nb_scores: int) -> None:
+            nb_scores: int,
+            match_negatives: bool) -> None:
         """
         Test training, verifying that overerall cost on a batch lowers
         during training when using same data
@@ -479,12 +484,16 @@ class TestTrainableDecisionCatModel:
         labels = get_labels(arrow, nb_scores, nb_labels)
 
         # compute cost
-        initial_cost, _, _ = model.cost(datas, [arrow], labels)
+        initial_cost, _, _ = model.cost(
+            datas, [arrow], labels, match_negatives=match_negatives)
 
         # let's train for several steps
         for _ in range(nb_steps):
-            model.train(datas, [arrow], labels, step=True)  # type: ignore
+            model.train(
+                datas, [arrow], labels, step=True,
+                match_negatives=match_negatives)  # type: ignore
 
-        final_cost, _, _ = model.cost(datas, [arrow], labels)
+        final_cost, _, _ = model.cost(
+            datas, [arrow], labels, match_negatives=match_negatives)
 
         assert final_cost <= initial_cost
