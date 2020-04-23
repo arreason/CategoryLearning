@@ -16,6 +16,7 @@ from string import ascii_letters, digits
 import random
 
 import pytest
+from tests.test_tools import pytest_generate_tests
 
 from catlearn.graph_utils import (
     DirectedGraph, DirectedAcyclicGraph, GraphRandomFactory)
