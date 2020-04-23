@@ -299,11 +299,13 @@ class RelationCache(
             for arr in self.arrows():
                 if not result_graph.has_edge(arr[0], arr[-1]):
                     result_graph.add_edge(arr[0], arr[-1])
-                score = self[arr]
+                new_score = kl_match(
+                    self[arr], label=None, against_negative=False)
+                new_label = arr.derive()
+                
                 result_graph[arr[0]][arr[-1]][
-                    NegativeMatch(arr.derive())
-                ] = arr.derive(), kl_match(
-                    score, label=None, against_negative=False)
+                    NegativeMatch(new_label)
+                ] = new_label, new_score
 
         for src, tar in labels.edges:
             # add edge if necessary
@@ -322,12 +324,13 @@ class RelationCache(
                     self.add(new_arr)
 
                     # match new arrow against negative label
-                    new_score = kl_match(
-                        self[new_arr], label=None, against_negative=False)
-                    new_label = new_arr.derive()
-                    result_graph[src][tar][
-                        NegativeMatch(new_label)
-                    ] = new_label, new_score
+                    if match_negatives:
+                        new_score = kl_match(
+                            self[new_arr], label=None, against_negative=False)
+                        new_label = new_arr.derive()
+                        result_graph[src][tar][
+                            NegativeMatch(new_label)
+                        ] = new_label, new_score
 
             # get scores of existing arrows from src to tar
             scores = {
