@@ -21,14 +21,12 @@ def kl_match(
         against_negative: bool = False) -> Tsor:
     """
     Kullback-Leibler divergence based match. Two modes can be used:
-    if against_negative is True, will return the the log of the ratio of the
-    kl of the score against the label and the kl of the score against
-    the negative_label
-    if against_negative is False, will return the kl of the score
-    for the given label
+    - if against_negative is True, will return KL divergence of score versus
+    given label, minus KL divergence of score versus negative label
+    - if against_negative is False, will return the KL divergence of score
+    versus given label
 
-    Additionally if label is not provided or is None,
-    will match against negative label
+    Additionally if label is not provided, it will default to the negative label
     """
     label_vector = torch.zeros(score.shape) if label is None else label
     kl_div = subproba_kl_div(score, label_vector)
