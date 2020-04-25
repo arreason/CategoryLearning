@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 # pylint: disable=redefined-outer-name, invalid-name, abstract-method, no-self-use
+# pylint: disable=too-few-public-methods,too-many-locals
 """
 Tests for the categorical_model file.
 """
@@ -15,18 +16,17 @@ import torch
 from torch import nn
 
 import pytest
+from tests.test_tools import pytest_generate_tests
 
 from catlearn.tensor_utils import subproba_kl_div, Tsor
 from catlearn.graph_utils import DirectedGraph
 from catlearn.composition_graph import CompositeArrow
+from catlearn.relation_cache import RelationCache, NegativeMatch
 from catlearn.categorical_model import (
     RelationModel, ScoringModel,
     DecisionCatModel, TrainableDecisionCatModel)
-from catlearn.relation_cache import RelationCache
 from catlearn.algebra_models import (
     Algebra, VectAlgebra, MatrixAlgebra, AffineAlgebra)
-
-from tests.test_tools import pytest_generate_tests
 
 
 # List of algebras to verify
@@ -142,6 +142,10 @@ def arrow(request: Any, label_universe: Mapping[int, Tsor]) -> CompositeArrow[in
         range(1 + request.param),
         random.choices(list(label_universe), k=request.param))
 
+@pytest.fixture(params=[True, False])
+def match_negatives(request: Any):
+    """Wether negative matches should be counted"""
+    return request.param
 
 def get_labels(
         nodes: Iterable[int],
@@ -268,7 +272,8 @@ class TestRelationCache:
             relation: RelationModel,
             label_universe: Mapping[int, Tsor],
             scoring: ScoringModel, algebra: Algebra,
-            arrow: CompositeArrow[int, Tsor]) -> None:
+            arrow: CompositeArrow[int, int],
+            match_negatives: bool) -> None:
         """
         Test for graph matching
         """
@@ -281,7 +286,7 @@ class TestRelationCache:
         labels = get_labels(arrow, nb_scores, nb_labels)
 
         # match label graph against cache
-        matches = cache.match(labels)
+        matches = cache.match(labels, match_negatives=match_negatives)
 
         # check that matches graph contains everything necessary
         for (src, tar), edge_labels in labels.edges().items():  # pylint: disable=no-member
@@ -306,16 +311,39 @@ class TestRelationCache:
                         for arr in cache.label_universe}
 
                 kldivs = {
-                    idx: subproba_kl_div(score, value)
+                    idx: (
+                        subproba_kl_div(score, value)
+                        - float(match_negatives) * subproba_kl_div(
+                            score, torch.zeros(score.shape)
+                            ))
                     for idx, score in available.items()}
 
                 expected_match = min(kldivs, key=kldivs.get)
-                expected_cost = kldivs[expected_match]
+                expected_score = available[expected_match]
+                expected_cost = subproba_kl_div(
+                    expected_score, value)
 
                 assert matches[src][tar][label][0] == expected_match
                 assert (
                     (matches[src][tar][label][1] - expected_cost).abs()
                     <= TEST_EPSILON)
+
+            # check that negatives are matched if match_negatives is true
+            if match_negatives:
+                positives = set(
+                    matches[src][tar][label][0] for label in edge_labels)
+                expected_negatives = set(
+                    arr.derive() for arr in cache.arrows(src, tar)) - positives
+                for negative in expected_negatives:
+                    expected_label = NegativeMatch(negative)
+                    assert expected_label in matches[src][tar]
+
+                    score = cache[negative.suspend(src, tar)]
+                    expected_cost = subproba_kl_div(
+                        score, torch.zeros(score.shape))
+                    assert (
+                        (matches[src][tar][expected_label][1] - expected_cost)
+                        <= TEST_EPSILON)
 
 
 class TestDecisionCatModel:
@@ -329,7 +357,8 @@ class TestDecisionCatModel:
             algebra: Algebra,
             nb_features: int,
             nb_labels: int,
-            nb_scores: int) -> None:
+            nb_scores: int,
+            match_negatives: bool) -> None:
         """
         Test cost function of decision cat model
         """
@@ -343,7 +372,8 @@ class TestDecisionCatModel:
         labels = get_labels(arrow, nb_scores, nb_labels)
 
         # compute cost. we want to verify all goes smoothly
-        cost, cache, matched = model.cost(datas, [arrow], labels)
+        cost, cache, matched = model.cost(
+            datas, [arrow], labels, match_negatives=match_negatives)
 
         # the resulting cost should be a positive finite real number
         assert torch.isfinite(cost)
@@ -352,7 +382,8 @@ class TestDecisionCatModel:
         # compute cache and matching for comparison
         expected_cache = RelationCache[int, Tsor](
             relation, label_universe, model.score, model.algebra.comp, datas, [arrow])
-        expected_matched = expected_cache.match(labels)
+        expected_matched = expected_cache.match(
+            labels, match_negatives=match_negatives)
 
         # verify obtained cache and matching are identical to expected
         assert set(cache.keys()) == set(expected_cache.keys())
@@ -383,7 +414,8 @@ class TestTrainableDecisionCatModel:
             nb_features: int,
             nb_labels: int,
             nb_scores: int,
-            reload: bool) -> None:
+            reload: bool,
+            match_negatives: bool) -> None:
         """
         Test training, verifying that not activating updates does:
             - conserve gradients
@@ -400,7 +432,7 @@ class TestTrainableDecisionCatModel:
 
         # go through one train stage
         expected_cache, expected_matched = model.train(
-            datas, [arrow], labels, step=False)
+            datas, [arrow], labels, step=False, match_negatives=match_negatives)
 
         # reset model, extract everything again
         if reload:
@@ -410,7 +442,7 @@ class TestTrainableDecisionCatModel:
         else:
             model.reset()
         cache, matched = model.train(
-            datas, [arrow], labels, step=False)
+            datas, [arrow], labels, step=False, match_negatives=match_negatives)
 
         # verify obtained cache and matching are identical to expected
         assert set(cache.keys()) == set(expected_cache.keys())
@@ -436,7 +468,8 @@ class TestTrainableDecisionCatModel:
             nb_features: int,
             nb_labels: int,
             nb_steps: int,
-            nb_scores: int) -> None:
+            nb_scores: int,
+            match_negatives: bool) -> None:
         """
         Test training, verifying that overerall cost on a batch lowers
         during training when using same data
@@ -451,12 +484,16 @@ class TestTrainableDecisionCatModel:
         labels = get_labels(arrow, nb_scores, nb_labels)
 
         # compute cost
-        initial_cost, _, _ = model.cost(datas, [arrow], labels)
+        initial_cost, _, _ = model.cost(
+            datas, [arrow], labels, match_negatives=match_negatives)
 
         # let's train for several steps
         for _ in range(nb_steps):
-            model.train(datas, [arrow], labels, step=True)  # type: ignore
+            model.train(
+                datas, [arrow], labels, step=True,
+                match_negatives=match_negatives)  # type: ignore
 
-        final_cost, _, _ = model.cost(datas, [arrow], labels)
+        final_cost, _, _ = model.cost(
+            datas, [arrow], labels, match_negatives=match_negatives)
 
         assert final_cost <= initial_cost

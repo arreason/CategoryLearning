@@ -1,5 +1,6 @@
 from types import MappingProxyType
-from typing import Mapping, Callable, Iterable, Iterator, Generic, Tuple
+from typing import (
+    Mapping, Callable, Iterable, Generic, Tuple, Iterator, Hashable, Optional)
 from collections import abc
 
 import torch
@@ -13,6 +14,65 @@ from catlearn.composition_graph import (
 RelationEmbedding = Callable[[Tsor, Tsor, Tsor], Tsor]
 Scorer = Callable[[Tsor, Tsor, Tsor], Tsor]
 BinaryOp = Callable[[Tsor, Tsor], Tsor]
+
+
+def kl_match(
+        score: Tsor, label: Optional[Tsor] = None,
+        against_negative: bool = False) -> Tsor:
+    """
+    Kullback-Leibler divergence based match. Two modes can be used:
+    - if against_negative is True, will return KL divergence of score versus
+    given label, minus KL divergence of score versus negative label
+    - if against_negative is False, will return the KL divergence of score
+    versus given label
+
+    Additionally if label is not provided, it will default to the negative label
+    """
+    label_vector = torch.zeros(score.shape) if label is None else label
+    kl_div = subproba_kl_div(score, label_vector)
+    if against_negative:
+        return kl_div - kl_match(score, label=None, against_negative=False)
+    return kl_div
+
+
+class NegativeMatch(abc.Hashable):
+    """
+    A wrapper to tag negative matches in the result of a Cache match
+    against a label graph
+    """
+    def __init__(self, value: Hashable):
+        """
+        wrap value in a NegativeMatch object
+        """
+        super().__init__()
+        self._value = value
+
+    @property
+    def value(self) -> Hashable:
+        """
+        Get wrapped value
+        """
+        return self._value
+
+    def __hash__(self) -> int:
+        """
+        Get hash of NegativeMatch object
+        """
+        return hash(("NegativeMatch", self._value))
+
+    def __eq__(self, other_object: Hashable) -> bool:
+        """
+        Test equality with an other object
+        """
+        return (
+            isinstance(other_object, __class__)  # type: ignore # pylint: disable=undefined-variable
+            and self.value == other_object.value)
+
+    def __repr__(self):
+        """
+        String representation of a negative match
+        """
+        return f"{type(self).__name__}({self.value})"
 
 
 class RelationCache(
@@ -221,7 +281,9 @@ class RelationCache(
         self._causality_cost = torch.zeros(())
         self._nb_compositions = 0
 
-    def match(self, labels: DirectedGraph[NodeType]) -> Tsor:
+    def match(
+            self, labels: DirectedGraph[NodeType],
+            match_negatives: bool = True) -> Tsor:
         """
         Match the composition graph with a graph of labels. For each label
         vector, get the best match in the graph. if No match is found, set to
@@ -231,6 +293,18 @@ class RelationCache(
         are added to the cache.
         """
         result_graph = DirectedGraph[NodeType]()
+        if match_negatives:
+            for arr in self.arrows():
+                if not result_graph.has_edge(arr[0], arr[-1]):
+                    result_graph.add_edge(arr[0], arr[-1])
+                new_score = kl_match(
+                    self[arr], label=None, against_negative=False)
+                new_label = arr.derive()
+                
+                result_graph[arr[0]][arr[-1]][
+                    NegativeMatch(new_label)
+                ] = new_label, new_score
+
         for src, tar in labels.edges:
             # add edge if necessary
             if not result_graph.has_edge(src, tar):
@@ -241,8 +315,20 @@ class RelationCache(
             if (
                     not self.graph.has_edge(src, tar)
                     or not self.graph[src][tar]):
+
                 for arr in self.label_universe:
-                    self.add(CompositeArrow([src, tar], [arr]))
+                    # add arrow
+                    new_arr = CompositeArrow([src, tar], [arr])
+                    self.add(new_arr)
+
+                    # match new arrow against negative label
+                    if match_negatives:
+                        new_score = kl_match(
+                            self[new_arr], label=None, against_negative=False)
+                        new_label = new_arr.derive()
+                        result_graph[src][tar][
+                            NegativeMatch(new_label)
+                        ] = new_label, new_score
 
             # get scores of existing arrows from src to tar
             scores = {
@@ -253,12 +339,18 @@ class RelationCache(
             for name, label in labels[src][tar].items():
                 # evaluate candidate relationships
                 candidates = {
-                    arr: subproba_kl_div(score, label)
+                    arr: kl_match(
+                        score, label, against_negative=match_negatives)
                     for arr, score in scores.items()}
 
                 # save the best match in result graph
                 best_match = min(candidates, key=candidates.get)
-                result_graph[src][tar][name] = (
-                    best_match, candidates[best_match])
+
+                result_graph[src][tar][name] = (best_match, kl_match(
+                    scores[best_match], label, against_negative=False))
+
+                # remove arrow from negative match
+                # use pop in case it has already been removed (several matches)
+                result_graph[src][tar].pop(NegativeMatch(best_match), None)
 
         return result_graph

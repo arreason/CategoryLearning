@@ -144,7 +144,8 @@ class DecisionCatModel:
             self,
             data_points: Mapping[NodeType, Tsor],
             relations: Iterable[CompositeArrow[NodeType, ArrowType]],
-            labels: DirectedGraph[NodeType]) -> Tuple[
+            labels: DirectedGraph[NodeType],
+            match_negatives: bool = True) -> Tuple[
                 Tsor,
                 RelationCache[NodeType, ArrowType],
                 DirectedGraph[NodeType]]:
@@ -158,7 +159,7 @@ class DecisionCatModel:
         """
         # generate the relation cache and match against labels
         cache = self.generate_cache(data_points, relations)
-        matched = cache.match(labels)
+        matched = cache.match(labels, match_negatives)
 
         total = sum(
             sum(elem for _, elem in costs.values())
@@ -280,13 +281,15 @@ class TrainableDecisionCatModel(DecisionCatModel):
             data_points: Mapping[NodeType, Tsor],
             relations: Iterable[CompositeArrow[NodeType, ArrowType]],
             labels: DirectedGraph[NodeType],
-            step: bool = True) -> Tuple[
+            step: bool = True,
+            match_negatives: bool = True) -> Tuple[
                 RelationCache[NodeType, ArrowType], DirectedGraph[NodeType]]:
         """
         perform one training step on a batch of tuples
         """
         # backprop on the batch
-        cost, cache, matched = self.cost(data_points, relations, labels)
+        cost, cache, matched = self.cost(
+            data_points, relations, labels, match_negatives)
         self._cost = self._cost + cost
 
         if step:

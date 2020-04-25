@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-# pylint: disable=redefined-outer-name, invalid-name, abstract-method, no-self-use
+# pylint: disable=redefined-outer-name, invalid-name, abstract-method,no-self-use,too-few-public-methods
 """
 tests for random graph generation
 """
@@ -16,11 +16,10 @@ from string import ascii_letters, digits
 import random
 
 import pytest
+from tests.test_tools import pytest_generate_tests
 
 from catlearn.graph_utils import (
     DirectedGraph, DirectedAcyclicGraph, GraphRandomFactory)
-
-from tests.test_tools import pytest_generate_tests
 
 
 @pytest.fixture(params=[0, 432358, 98765, 326710, 54092])
@@ -215,10 +214,8 @@ class TestDirectedGraph:
                  expected_graph=DirectedGraph({0: [1], 1: []})),
             dict(graph=DirectedGraph({0: {1: {"label": 1}}, 1: []}),
                  expected_graph=DirectedGraph({
-                    0: {1: {
-                        ("label", False): 1,
-			("label", True): 1}},
-                    1: []}))
+                     0: {1: {("label", False): 1, ("label", True): 1}},
+                     1: []}))
             ]
         }
 
@@ -383,7 +380,7 @@ class TestDirectedGraph:
         """
         stringified_graph = graph.stringify()
         assert all(
-            set(node) <= __class__.ALLOWED_CHARS for node in stringified_graph)  # type: ignore
+            set(node) <= __class__.ALLOWED_CHARS for node in stringified_graph)  # type: ignore # pylint: disable=undefined-variable
         assert stringified_graph == expected_graph
 
     @staticmethod
