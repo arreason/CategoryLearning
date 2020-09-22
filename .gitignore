@@ -25,8 +25,14 @@ wheels/
 *.egg
 MANIFEST
 
+# IDE settings
+.VSCodeCounter/
+
 # Datasets
-data/
+fb15k-237/
+
+# Debug
+debug/
 
 # PyInstaller
 #  Usually these files are written by a python script from a template

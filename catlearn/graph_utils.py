@@ -32,9 +32,10 @@ def mapping_product(mapping0: Mapping, mapping1: Mapping) -> Iterator:
 
 class DirectedGraph(Generic[NodeType], DiGraph, abc.MutableMapping):  # pylint: disable=unsubscriptable-object
     """
-    A class to encapsulate directed graphs. Initialized from a dictionary:
+    A class to encapsulate directed graphs. Can be initialized from a dictionary:
     Values are iterable which must range over keys of the dictionary.
     For a key k,  v in self[k] means there is a vertex k -> v.
+    Complete list of available input formats: https://networkx.github.io/documentation/stable/reference/classes/digraph.html
     Different graph composition functions are provided in order to facilitate
     the generation of examples.
     """

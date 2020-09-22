@@ -94,10 +94,10 @@ pylint_check "catlearn/" 2#000011
 pylint_check "tests/" 2#000011 "no-self-use,duplicate-code"
 
 # Type check on package
-type_check "catlearn/"
+# type_check "catlearn/"
 
 # Type check on tests
-type_check "tests/"
+# type_check "tests/"
 
 # Execute unit tests
 py.test -sv --exitfirst --durations=15 --cov=catlearn/ --no-cov-on-fail

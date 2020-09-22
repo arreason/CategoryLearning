@@ -16,3 +16,4 @@ jupyter
 pandas
 plotly
 pyyaml
+testfixtures
