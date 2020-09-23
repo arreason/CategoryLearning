@@ -6,7 +6,7 @@ for the categorical model
 from __future__ import annotations
 from itertools import chain
 from types import MappingProxyType
-from typing import Any, Callable, IO, Iterable, Mapping, Tuple, Union
+from typing import Any, Callable, IO, Iterable, Mapping, Tuple, Union, Optional
 
 import torch
 from torch.optim import Optimizer
@@ -131,21 +131,23 @@ class DecisionCatModel:
 
     def generate_cache(
             self, data_points: Mapping[NodeType, Tsor],
-            relations: Iterable[CompositeArrow[NodeType, ArrowType]]
+            relations: Iterable[CompositeArrow[NodeType, ArrowType]],
+            max_arrow_number: Optional[int] = None,
         ) -> Tsor:
         """
         generate a batch from a list of relations and datas
         """
         return RelationCache(
             self._relation_model, self._label_universe,
-            self.score, self.algebra.comp, data_points, relations)
+            self.score, self.algebra.comp, data_points, relations, max_arrow_number)
 
     def cost(
             self,
             data_points: Mapping[NodeType, Tsor],
             relations: Iterable[CompositeArrow[NodeType, ArrowType]],
             labels: DirectedGraph[NodeType],
-            match_negatives: bool = True) -> Tuple[
+            match_negatives: bool = True,
+            max_arrow_number: Optional[int] = None) -> Tuple[
                 Tsor,
                 RelationCache[NodeType, ArrowType],
                 DirectedGraph[NodeType]]:
@@ -158,7 +160,7 @@ class DecisionCatModel:
             - the label mathching
         """
         # generate the relation cache and match against labels
-        cache = self.generate_cache(data_points, relations)
+        cache = self.generate_cache(data_points, relations, max_arrow_number)
         matched = cache.match(labels, match_negatives)
 
         total = sum(
@@ -282,14 +284,15 @@ class TrainableDecisionCatModel(DecisionCatModel):
             relations: Iterable[CompositeArrow[NodeType, ArrowType]],
             labels: DirectedGraph[NodeType],
             step: bool = True,
-            match_negatives: bool = True) -> Tuple[
+            match_negatives: bool = True,
+            max_arrow_number: Optional[int] = None) -> Tuple[
                 RelationCache[NodeType, ArrowType], DirectedGraph[NodeType]]:
         """
         perform one training step on a batch of tuples
         """
         # backprop on the batch
         cost, cache, matched = self.cost(
-            data_points, relations, labels, match_negatives)
+            data_points, relations, labels, match_negatives, max_arrow_number)
         self._cost = self._cost + cost
 
         if step:

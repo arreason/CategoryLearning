@@ -5,9 +5,9 @@
 """
 Tests for the categorical_model file.
 """
-from typing import Any, Dict, Mapping, Iterable, List, Callable
+from typing import Any, Dict, Mapping, Iterable, List, Callable, Optional
 from functools import reduce
-from itertools import combinations, product
+from itertools import combinations, product, chain
 from tempfile import NamedTemporaryFile
 from math import inf
 import random
@@ -26,12 +26,12 @@ from catlearn.categorical_model import (
     RelationModel, ScoringModel,
     DecisionCatModel, TrainableDecisionCatModel)
 from catlearn.algebra_models import (
-    Algebra, VectAlgebra, MatrixAlgebra, AffineAlgebra)
+    Algebra, VectAlgebra, VectMultAlgebra, MatrixAlgebra, AffineAlgebra)
 
 
 # List of algebras to verify
 # Automagic, adding an algebra will get tested right away
-CLASSES_TO_TEST = {VectAlgebra, MatrixAlgebra, AffineAlgebra}
+CLASSES_TO_TEST = {VectAlgebra, VectMultAlgebra, MatrixAlgebra, AffineAlgebra}
 
 
 # path to the data of the generators used for synthetic datasets
@@ -183,6 +183,22 @@ class TestRelationCache:
     """
     Tests for RelationCache class
     """
+    params: Dict[str, List[Any]] = {
+        "test_prune": [
+            dict(nb_to_prune=0),
+            dict(nb_to_prune=1),
+            dict(nb_to_prune=2),
+            dict(nb_to_prune=-1),
+            dict(nb_to_prune=-2),
+        ],
+        "test_build_composites": [
+            dict(max_arrow_length=1, max_arrow_number=100),
+            dict(max_arrow_length=2, max_arrow_number=100),
+            dict(max_arrow_length=3, max_arrow_number=100),
+            dict(max_arrow_length=10, max_arrow_number=100),
+        ]
+    }
+
     @staticmethod
     def get_cache(
             relation: RelationModel,
@@ -190,19 +206,20 @@ class TestRelationCache:
             scoring: ScoringModel,
             algebra: Algebra,
             data_dim: int,
+            datas: Optional[Mapping[int, Tsor]],
             *arr: CompositeArrow[int, Tsor]) -> RelationCache:
         """
         get a relation cache, initialized with random data and one composite
         arrow if given (otherwise it is empty)
         """
-        if arr:
-            datas = {idx: torch.rand(data_dim) for idx in set().union(*arr)}  # type: ignore
-        else:
-            datas = {}
-            arr = ()
+        missing_points =  {
+            idx for idx in chain(*arr) if idx not in (datas or {})}
+        missing_datas = {
+            idx: torch.rand(data_dim) for idx in missing_points}  # type: ignore
 
         return RelationCache[int, Tsor](
-            relation, label_universe, scoring, algebra.comp, datas, arr)
+            relation, label_universe, scoring, algebra.comp,
+            {**(datas or {}), **missing_datas}, arr)
 
     @staticmethod
     def test_relation(
@@ -216,7 +233,8 @@ class TestRelationCache:
         """
         # create cache with one composite arrow
         cache = TestRelationCache.get_cache(
-            relation, label_universe, scoring, algebra, nb_features, arrow)
+            relation, label_universe, scoring, algebra,
+            nb_features, None, arrow)
 
         # compute expected value of corresponding relation
         expected_result = reduce(
@@ -241,7 +259,8 @@ class TestRelationCache:
         """
         # create cache with one composite arrow
         cache = TestRelationCache.get_cache(
-            relation, label_universe, scoring, algebra, nb_features, arrow)
+            relation, label_universe, scoring, algebra, nb_features, None,
+            arrow)
 
         # collect minimum of all total scores of parts of arrow
         # note that actual score of arrow is also taken in the loop
@@ -280,7 +299,8 @@ class TestRelationCache:
         # create cache with one composite arrow
         cache = TestRelationCache.get_cache(
             relation, label_universe,
-            scoring, algebra, nb_features, arrow)
+            scoring, algebra, nb_features, None,
+            arrow)
 
         # create label graph
         labels = get_labels(arrow, nb_scores, nb_labels)
@@ -344,6 +364,93 @@ class TestRelationCache:
                     assert (
                         (matches[src][tar][expected_label][1] - expected_cost)
                         <= TEST_EPSILON)
+
+    @staticmethod
+    def test_prune(
+            nb_features: int,
+            relation: RelationModel,
+            label_universe: Mapping[int, Tsor],
+            scoring: ScoringModel, algebra: Algebra,
+            arrow: CompositeArrow[int, Tsor],
+            nb_to_prune: int) -> None:
+        """
+            Test pruning operation.
+            If nb_to_prune is a positive integer, tries to prune nb_to_prune
+            relations
+            If nb_to_prune is a negative integer, tries to keep at most
+            nb_to_prune relations + 1
+        """
+        # create cache with one composite arrow
+        cache = TestRelationCache.get_cache(
+            relation, label_universe,
+            scoring, algebra, nb_features, None,
+            arrow)
+
+        # target number of relations to keep
+        nb_to_keep = (
+            len(cache) - nb_to_prune if nb_to_prune >= 0
+            else -nb_to_prune + 1)
+
+        initial_content = frozenset(cache)
+
+        pruned = cache.prune_relations(nb_to_keep)
+
+        final_content = frozenset(cache)
+
+        assert initial_content == (final_content ^ pruned)
+
+        assert(
+            len(cache) <= nb_to_keep
+            or all(
+                len(list(cache.arrows(relation[0], relation[-1]))) == 1
+                for relation in cache.arrows() if len(relation) == 1))
+
+    @staticmethod
+    def test_build_composites(
+        nb_labels: int,
+        arrow: CompositeArrow[int, Tsor],
+        max_arrow_length: int,
+        max_arrow_number: int,
+    ) -> None:
+        """
+            Test composite building.
+        """
+
+        def relation(_: Tsor, __: Tsor, ___: int) -> Tsor:
+            return torch.ones(1)
+
+        singleton_universe = {
+            i: torch.ones(1) for i in range(nb_labels)}
+
+        def scoring(src: Tsor, dst: Tsor, rel: Tsor):
+            return rel if dst - src < max_arrow_length else torch.zeros(1)
+
+        scores_algebra = VectMultAlgebra(1)
+
+        nb_points = len(arrow) + 1
+        datas = {
+            i: torch.full((1,), i, dtype=torch.float) for i in range(nb_points)}
+
+        complete_cache = TestRelationCache.get_cache(
+            relation, singleton_universe,
+            scoring, scores_algebra, 1,
+            datas, arrow
+        )
+
+        cache = TestRelationCache.get_cache(
+            relation, singleton_universe,
+            scoring, scores_algebra, 1, datas,
+            *(arrow[idx:idx + 1] for idx in range(nb_points - 1)),
+        )
+
+        cache.build_composites(max_arrow_number=max_arrow_number)
+
+        assert (
+            frozenset(
+                complete_cache.arrows(
+                    include_non_causal=False,
+                    arrow_length_range=(0, max_arrow_length + 1)))
+            == frozenset(cache.arrows(include_non_causal=False)))
 
 
 class TestDecisionCatModel:

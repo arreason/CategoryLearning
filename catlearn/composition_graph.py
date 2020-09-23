@@ -13,6 +13,7 @@ from typing import (
     TypeVar, Generic, Optional, Union, Iterable, Tuple, Iterator, Callable)
 from collections import abc
 from itertools import chain
+from math import inf
 
 from catlearn.graph_utils import DirectedGraph, NodeType
 
@@ -102,7 +103,7 @@ class CompositeArrow(Generic[NodeType, ArrowType], abc.Sequence):  # pylint: dis
             if index.step:
                 return self.nodes[index]
 
-            # compute start and stop of nodes slice select nodes
+            # compute start and stop of nodes slice
             length = len(self)
             if index.start is None:
                 start = 0
@@ -302,31 +303,47 @@ class CompositionGraph(Generic[NodeType, ArrowType, AlgebraType], abc.Mapping): 
 
     def arrows(
             self, src: Optional[NodeType] = None,
-            tar: Optional[NodeType] = None
+            tar: Optional[NodeType] = None,
+            arrow_length_range: Tuple[int, Optional[int]] = (0, None),
         ) -> Iterator[CompositeArrow[NodeType, ArrowType]]:
         """
         Get an iterator over all arrows starting at src and ending at tar.
         If source or tar is None, will loop through all possible sources
         and arrows.
         If no existing arrows (or src/tar not in the underlying graph),
-        returns an empty iterator
+        returns an empty iterator.
+        An arrow length range can also be specified. In this case,
+        only arrows with a length in the specified range are returned
         """
-        if src is None and tar is None:
-            # iterate over all edges of graph in this case
-            return iter(self)
+        min_length = arrow_length_range[0]
+        max_length = arrow_length_range[1] if arrow_length_range[1] else inf
+
         if (
                 src is not None and tar is not None
                 and self.graph.has_edge(src, tar)):
             # iterate over all edges from src to tar
-            return (arr.suspend(src, tar) for arr in self.graph[src][tar])
+            # careful to length: the derived arrow has length diminished by 1
+            return (
+                arr.suspend(src, tar) for arr in self.graph[src][tar]
+                if (
+                    len(arr) >= min_length - 1
+                    and len(arr) < max_length - 1))
         if src is not None and tar is None and src in self.graph:
             # iterate over all edges starting at src
             return chain(*(
-                self.arrows(src, node) for node in self.graph[src]))
+                self.arrows(src, node, arrow_length_range=arrow_length_range)
+                for node in self.graph[src]))
         if src is None and tar is not None and tar in self.graph:
             # iterate over all edges ending at tar
             return chain(*(
-                self.arrows(node, tar) for node in self.graph.op[tar]))
+                self.arrows(node, tar, arrow_length_range=arrow_length_range)
+                for node in self.graph.op[tar]))
+        if src is None and tar is None:
+            # iterate over all edges of graph in this case
+            return chain(*(
+                self.arrows(node, None, arrow_length_range=arrow_length_range)
+                for node in self.graph.nodes
+            ))
 
         return iter(())
 

@@ -11,7 +11,8 @@ from functools import reduce
 from operator import mul
 import torch
 
-from catlearn.tensor_utils import repeat_tensor, zeros_like, DEFAULT_EPSILON
+from catlearn.tensor_utils import (
+    repeat_tensor, zeros_like, ones_like, DEFAULT_EPSILON)
 
 
 class Algebra:
@@ -122,6 +123,59 @@ class VectAlgebra(Algebra):
         assert data1.shape[-1] == self.dim, "inputs should match dim of model"
 
         return data1 + data2
+
+
+class VectMultAlgebra(Algebra):
+    """
+        A class to encapsulate a finite dimensional (possibly dependant on
+        a vector input)
+        R-vector space algebra:
+            unit is 1-vector
+            composition is elementwise multiplication
+    """
+
+    def __init__(self, dim: int) -> None:
+        """
+        Creates new instance of finite dimensional vector space algebra of a
+        given dimension
+        """
+        assert dim >= 1, "Dimension should be strictly positive"
+
+        self._dim: int = dim
+
+    @property
+    def dim(self) -> int:
+        """
+        returns the actual dimension of an element of the model
+        """
+        return self._dim
+
+    @property
+    def flatdim(self) -> int:
+        """
+        returns the actual dimension of an element of the model, once flattened
+        """
+        return self._dim
+
+    def unit(self, data_tuple: torch.Tensor) -> torch.Tensor:
+        """
+        vector unit. Takes a batch as inputs, returns 0 vectors
+        for each vector in the batch
+        """
+        assert data_tuple.ndimension() >= 1, "input should have ndim >= 1"
+
+        return ones_like(data_tuple, data_tuple.shape[:-1] + (self.dim,))
+
+    def comp(self, data1: torch.Tensor, data2: torch.Tensor) -> torch.Tensor:
+        """
+        vector sum. Takes two batches of same shape as inputs, returns their
+        sum
+        """
+        assert data1.shape == data2.shape, "inputs should have the same shape"
+        assert data1.ndimension() >= 1, "input should have ndim >= 1"
+        assert data1.shape[-1] == self.dim, "inputs should match dim of model"
+
+        return data1 * data2
 
 
 class MatrixAlgebra(Algebra):
