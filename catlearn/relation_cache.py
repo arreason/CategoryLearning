@@ -1,7 +1,8 @@
 from types import MappingProxyType
 from typing import (
     Mapping, Callable, Iterable, Generic, Tuple, Iterator, Hashable, Optional)
-from collections import abc
+from collections import abc, defaultdict
+from math import isfinite
 
 import torch
 
@@ -354,3 +355,54 @@ class RelationCache(
                 result_graph[src][tar].pop(NegativeMatch(best_match), None)
 
         return result_graph
+
+    def _prune_worst_relation(self) -> Optional[
+            CompositeArrow[NodeType, ArrowType]]:
+        """
+            Remove the relation with the lowest score in the cache.
+            Only remove 1st order arrows. arrows which are removed are those with the lowest score relative to other arrows.
+
+            Returns the relation if it could be removed, None otherwise
+        """
+        # create a dictionary of total scores of each arrow
+        scores = {
+            arrow: torch.log(torch.sum(self[arrow]))
+            for arrow in self.arrows()}
+
+        # compute marginal utility of each arrow
+        utility = defaultdict(lambda: 0.)
+        for arrow in self.arrows():
+            src = arrow[0]
+            tar = arrow[-1]
+            other_scores = [
+                scores[arr] for arr in self.arrows(src, tar)
+                if arr is not arrow]
+
+            for idx in range(len(arrow)):
+                utility[arrow[idx:(idx + 1)]] += max(scores[arrow] - max(other_scores))
+
+        # identify worst relation
+        to_remove = min(utility, key=lambda arr: utility[arr])
+
+        # remove it from all dicts
+        if isfinite(to_remove):
+            del self[to_remove]
+            return to_remove
+
+    def prune_relations(
+        self, nb_to_keep: int) -> List[CompositeArrrow[NodeType, ArrowType]]:
+        """
+            Remove relations with a low score in the cache, and keep only nb_to_keep relations of each order.
+            Only remove 1st order arrows. arrows which are removed are those with the lowest score relative to other arrows.
+
+            Returns the list of pruned relations
+        """
+        pruned = []
+        while true:
+            relation = (
+                None if len(self) <= nb_to_keep
+                else self._prune_worst_relation())
+            if relation is not None:
+                pruned.append(relation)
+                continue
+            return pruned
