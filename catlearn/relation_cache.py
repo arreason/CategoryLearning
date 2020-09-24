@@ -1,8 +1,9 @@
 from types import MappingProxyType
 from typing import (
-    Mapping, Callable, Iterable, Generic, Tuple, Iterator, Hashable, Optional)
+    Mapping, Callable, Iterable, Generic,
+    Tuple, Iterator, Hashable, Optional, List)
 from collections import abc, defaultdict
-from math import isfinite
+from math import isfinite, inf
 
 import torch
 
@@ -374,23 +375,23 @@ class RelationCache(
         for arrow in self.arrows():
             src = arrow[0]
             tar = arrow[-1]
-            other_scores = [
+            other_scores = (
                 scores[arr] for arr in self.arrows(src, tar)
-                if arr is not arrow]
+                if arr is not arrow)
 
             for idx in range(len(arrow)):
-                utility[arrow[idx:(idx + 1)]] += max(scores[arrow] - max(other_scores))
+                utility[arrow[idx:(idx + 1)]] += max(scores[arrow] - max(other_scores, default=-inf), 0.)
 
         # identify worst relation
         to_remove = min(utility, key=lambda arr: utility[arr])
 
         # remove it from all dicts
-        if isfinite(to_remove):
+        if isfinite(utility[to_remove]):
             del self[to_remove]
             return to_remove
 
     def prune_relations(
-        self, nb_to_keep: int) -> List[CompositeArrrow[NodeType, ArrowType]]:
+        self, nb_to_keep: int) -> List[CompositeArrow[NodeType, ArrowType]]:
         """
             Remove relations with a low score in the cache, and keep only nb_to_keep relations of each order.
             Only remove 1st order arrows. arrows which are removed are those with the lowest score relative to other arrows.
@@ -398,7 +399,7 @@ class RelationCache(
             Returns the list of pruned relations
         """
         pruned = []
-        while true:
+        while True:
             relation = (
                 None if len(self) <= nb_to_keep
                 else self._prune_worst_relation())
