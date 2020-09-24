@@ -302,7 +302,7 @@ class RelationCache(
                 new_score = kl_match(
                     self[arr], label=None, against_negative=False)
                 new_label = arr.derive()
-                
+
                 result_graph[arr[0]][arr[-1]][
                     NegativeMatch(new_label)
                 ] = new_label, new_score
@@ -361,7 +361,8 @@ class RelationCache(
             CompositeArrow[NodeType, ArrowType]]:
         """
             Remove the relation with the lowest score in the cache.
-            Only remove 1st order arrows. arrows which are removed are those with the lowest score relative to other arrows.
+            Only remove 1st order arrows. arrows which are removed are those
+            with the lowest score relative to other arrows.
 
             Returns the relation if it could be removed, None otherwise
         """
@@ -380,7 +381,8 @@ class RelationCache(
                 if arr is not arrow)
 
             for idx in range(len(arrow)):
-                utility[arrow[idx:(idx + 1)]] += max(scores[arrow] - max(other_scores, default=-inf), 0.)
+                utility[arrow[idx:(idx + 1)]] += max(
+                    scores[arrow] - max(other_scores, default=-inf), 0.)
 
         # identify worst relation
         to_remove = min(utility, key=lambda arr: utility[arr])
@@ -393,8 +395,10 @@ class RelationCache(
     def prune_relations(
         self, nb_to_keep: int) -> List[CompositeArrow[NodeType, ArrowType]]:
         """
-            Remove relations with a low score in the cache, and keep only nb_to_keep relations of each order.
-            Only remove 1st order arrows. arrows which are removed are those with the lowest score relative to other arrows.
+            Remove relations with a low score in the cache, and keep only
+            nb_to_keep relations of each order.
+            Only remove 1st order arrows. arrows which are removed are those
+            with the lowest score relative to other arrows.
 
             Returns the list of pruned relations
         """
