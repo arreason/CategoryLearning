@@ -345,6 +345,31 @@ class TestRelationCache:
                         (matches[src][tar][expected_label][1] - expected_cost)
                         <= TEST_EPSILON)
 
+    @staticmethod
+    def test_prune(
+            nb_features: int,
+            relation: RelationModel,
+            label_universe: Mapping[int, Tsor],
+            scoring: ScoringModel, algebra: Algebra,
+            arrow: CompositeArrow[int, Tsor]) -> None:
+        """
+            Test pruning operation
+        """
+        # create cache with one composite arrow
+        cache = TestRelationCache.get_cache(
+            relation, label_universe,
+            scoring, algebra, nb_features, arrow)
+
+        # prune half of points
+        cache_size = len(cache)
+        pruned = cache.prune_relations(cache_size // 2)
+
+        assert(
+            len(cache) <= cache_size // 2
+            or all(
+                len(list(cache.arrows(relation[0], relation[-1])))
+                for relation in cache.arrows() if len(relation) == 1))
+
 
 class TestDecisionCatModel:
     """ Tests for DecisionCatModel class"""
