@@ -587,7 +587,7 @@ class TestSubgraphSampling:
         seed = rng.choice(list(g))
         sg = random_walk_sample(g, rng, 12, seeds=[seed])
         assert 1 <= len(sg) <= 12
-        assert len(sg.op[seed]) <= 1 # empty, or self-reference
+        assert len(sg.over(seed)) <= 1 # empty, or self-reference
 
     # Sometimes the RandomFactory fails (erode)
     @pytest.mark.flaky(reruns=3)
@@ -599,7 +599,7 @@ class TestSubgraphSampling:
         sg = random_walk_sample(g, rng, 5, n_seeds=n_seeds)
         assert 1 <= len(sg) <= 5 * n_seeds
         # Assert we have at most 3 roots
-        assert 1 <= sum(1 for v in sg.op if len(v) <= 1) <= n_seeds
+        assert 1 <= sum(1 for v in sg if len(sg.over(v)) <= 1) <= n_seeds
 
     # Sometimes the RandomFactory fails (erode)
     @pytest.mark.flaky(reruns=3)
