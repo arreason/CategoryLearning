@@ -21,7 +21,7 @@
 
 remote="$1"
 url="$2"
-repo="Recat-ML"
+repo="catlearn"
 
 # Verify commit naming convention
 z40=0000000000000000000000000000000000000000

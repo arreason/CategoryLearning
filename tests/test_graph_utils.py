@@ -19,7 +19,10 @@ import pytest
 from tests.test_tools import pytest_generate_tests
 
 from catlearn.graph_utils import (
-    DirectedGraph, DirectedAcyclicGraph, GraphRandomFactory)
+    DirectedGraph, DirectedAcyclicGraph, GraphRandomFactory,
+    sample, pagerank_sample, hubs_sample, authorities_sample,
+    uniform_sample, random_walk_vertex_sample,
+    random_walk_edge_sample, n_hop_sample, generate_random_graph)
 
 
 @pytest.fixture(params=[0, 432358, 98765, 326710, 54092])
@@ -507,3 +510,139 @@ class TestGraphRandomFactory:
 
         assert all(
             repeat(next(first_factory) == next(second_factory), nb_steps))  # type: ignore
+
+
+class TestSubgraphSampling:
+    """
+    Subgraph sampling test suite
+    """
+
+    @staticmethod
+    @pytest.fixture
+    def rng():
+        """ Return PRNG to use in the test """
+        return random.Random()
+
+    @staticmethod
+    @pytest.fixture(params=[3, 5])
+    def nb_steps(request: Any) -> int:
+        """
+        number of steps for the random graph generation
+        """
+        return request.param
+
+    @staticmethod
+    @pytest.fixture
+    def graph(nb_steps, rng):
+        """
+        Randomly create somewhat complex graphs, then return a complex one
+        """
+        return generate_random_graph(nb_steps, rng)
+
+    @staticmethod
+    @pytest.fixture(params=[1, 3, 5])
+    def n_seeds(request: Any) -> int:
+        """ Number of seeds for the random walk """
+        return request.param
+
+    @staticmethod
+    @pytest.fixture(params=[2, 10, 20])
+    def n_iter(request: Any) -> int:
+        """ Random walk loop count """
+        return request.param
+
+    @staticmethod
+    def test_sample(graph, rng):
+        """ Test sample respect a simple probability distribution: only first k nodes """
+        firsts = frozenset(list(graph)[:5])
+        ranking = lambda g: {v: 1.0 if v in firsts else 0.0 for v in g}
+        sg = sample(graph, len(graph), ranking, rng)
+        selected = frozenset(list(sg))
+        assert selected <= firsts
+
+    @staticmethod
+    def test_uniform(graph, rng):
+        """ Sanity checks on uniform sampler """
+        n_vertices = max(1, len(graph) - 4)
+        sg = uniform_sample(graph, n_vertices, rng)
+        assert 1 <= len(sg) <= n_vertices
+        assert all(v in graph for v in sg)
+
+    # Sometimes the algorithm does not converge
+    @pytest.mark.flaky(reruns=3)
+    @staticmethod
+    def test_pagerank(graph, rng):
+        """ Sanity checks on pagerank sampler """
+        n_vertices = max(1, len(graph) - 4)
+        sg = pagerank_sample(graph, n_vertices, rng)
+        assert 1 <= len(sg) <= n_vertices
+
+    # Sometimes the algorithm does not converge
+    @pytest.mark.flaky(reruns=3)
+    @staticmethod
+    def test_hubs(graph, rng):
+        """ Sanity checks on hubs sampler """
+        n_vertices = max(1, len(graph) - 4)
+        sg = hubs_sample(graph, n_vertices, rng)
+        assert 1 <= len(sg) <= n_vertices
+
+    # Sometimes the algorithm does not converge
+    @pytest.mark.flaky(reruns=3)
+    @staticmethod
+    def test_authorities(graph, rng):
+        """ Sanity checks on authorities sampler """
+        n_vertices = max(1, len(graph) - 4)
+        sg = authorities_sample(graph, n_vertices, rng)
+        assert 1 <= len(sg) <= n_vertices
+
+    @staticmethod
+    def test_random_walk_vertex(graph, rng, n_iter, n_seeds):
+        """ Sanity check on random walk sampler """
+        sg = random_walk_vertex_sample(graph, rng, n_iter, n_seeds=n_seeds)
+        assert 1 <= len(sg) <= n_iter + n_seeds
+        # Assert we have at most n_seeds roots
+        isRoot = lambda v: frozenset() <= sg.over(v) <= frozenset(v)
+        assert 1 <= sum(1 for v in sg if isRoot(v)) <= n_seeds
+
+    @staticmethod
+    def test_random_walk_vertex_specified_root(graph, rng, n_iter):
+        """ Sanity checks on random walk sampler """
+        seed = rng.choice(list(graph))
+        sg = random_walk_vertex_sample(graph, rng, n_iter, seeds=[seed])
+        assert 1 <= len(sg) <= n_iter + 1 # 1 seed
+        assert frozenset() <= sg.over(seed) <= frozenset(seed) # empty, or self-reference
+
+    @staticmethod
+    def test_random_walk_vertex_with_dual(graph, rng, n_iter):
+        """ Sanity checks on random walk sampler """
+        sg = random_walk_vertex_sample(graph, rng, n_iter, use_opposite=True)
+        assert 1 <= len(sg) <= n_iter + 1 # 1 seed
+
+    @staticmethod
+    def test_random_walk_edge(graph, rng, n_iter, n_seeds):
+        """ Sanity checks on random walk over edges sampler """
+        sg = random_walk_edge_sample(graph, rng, n_iter, n_seeds=n_seeds)
+        assert 0 <= len(sg.edges) <= n_iter + n_seeds
+        # Assert we have at most n_seeds roots
+        isRoot = lambda v: frozenset() <= sg.over(v) <= frozenset(v)
+        assert 0 <= sum(1 for v in sg if isRoot(v)) <= n_seeds
+
+    @staticmethod
+    def test_random_walk_edge_use_all(graph, rng, n_iter, n_seeds):
+        """ Sanity checks on random walk over edges sampler """
+        sg = random_walk_edge_sample(
+            graph, rng, n_iter, n_seeds=n_seeds,
+            use_opposite=True, use_both_ends=True)
+        assert 0 <= len(sg.edges) <= n_iter + n_seeds
+
+    @staticmethod
+    @pytest.fixture(params=[0, 1, 2])
+    def n_hops(request: Any) -> int:
+        """ Number of hops """
+        return request.param
+
+    @staticmethod
+    def test_n_hop_sampler(graph, rng, n_hops, n_seeds):
+        """ Sanity checks on n_hop sampler """
+        sg = n_hop_sample(graph, n_hops, n_seeds=n_seeds, rng=rng)
+        assert all(v in graph for v in sg)

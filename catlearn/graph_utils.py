@@ -14,9 +14,10 @@ import random
 import pickle
 
 import numpy as np
-from networkx import DiGraph, NetworkXError
+from networkx import DiGraph, NetworkXError, pagerank, hits
 
 NodeType = TypeVar("NodeType")
+ArrowType = TypeVar("ArrowType")
 
 
 def mapping_product(mapping0: Mapping, mapping1: Mapping) -> Iterator:
@@ -136,10 +137,10 @@ class DirectedGraph(Generic[NodeType], DiGraph, abc.MutableMapping):  # pylint: 
         i -> pruned_node -> j, there is a i -> j vertex added
         """
         # get parents and children of node
-        parents = self.op[node].copy()
-        children = self[node].copy()
+        parents = self.op[node]
+        children = self[node]
 
-        # delete node
+        # delete node - will handle self (x->x) and back reference (x->y->x)
         del self[node]
 
         # add children to all parents' children sets
@@ -309,16 +310,18 @@ class DirectedGraph(Generic[NodeType], DiGraph, abc.MutableMapping):  # pylint: 
             "pruning_factor should be a number between 0. and 1.")
         nb_to_prune = int(np.floor(pruning_factor * len(self)))
 
-        # draw nodes to be pruned
+        # Node sampler
         if random_generator is None:
-            to_prune = random.sample(
-                list(self), k=nb_to_prune)  # type: ignore
+            choice = lambda g: random.choice(g)
         else:
-            to_prune = random_generator.sample(
-                list(self), k=nb_to_prune)  # type: ignore
+            choice = lambda g: random_generator.choice(g)
 
         # prune nodes
-        for node in to_prune:
+        for _ in range(nb_to_prune):
+            if len(self) == 0: # Choice function requires non-empty collections
+                break
+            # Draw node to prune
+            node = choice(list(self)) # type: ignore
             self.prune(node)
 
         return self
@@ -330,7 +333,7 @@ class DirectedAcyclicGraph(DirectedGraph[NodeType]):
     """
     def __init__(self, *args, **kwargs) -> None:
         """
-            Create an acyclic directed graph from a dictinary.
+            Create an acyclic directed graph from a dictionary.
         """
 
         # init self as directed graph
@@ -496,9 +499,11 @@ class GraphRandomFactory:
             for op_nargs in ops_nargs)
 
         # get operands for each operation, with their right variance
+        # Use reverse with copy instead of op, otherwise we get a 'frozen'
+        # view into the graph and we cannot prune it
         operands = (
             map(
-                lambda graph, var: graph if var else graph.op,
+                lambda graph, var: graph if var else graph.reverse(copy=True),
                 self._random_generator.choices(self.graphs, k=op_nargs),
                 ops_vars)
             for op_nargs, ops_vars in zip(ops_nargs, operands_variance))
@@ -536,3 +541,226 @@ def generate_random_graph(
     # return a randomly chosen graph in the factory's memory
     idx = random_generator.randint(0, factory.nb_graphs - 1)
     return factory.graphs[idx]
+
+
+def sample(
+        graph: DirectedGraph[NodeType],
+        sample_vertices_size: int,
+        ranking: Callable[[DirectedGraph[NodeType]], Mapping[NodeType, float]],
+        rng: random.Random) -> DirectedGraph[NodeType]:
+    """
+    Sample a random subgraph of `graph` with respect to a probability
+    distribution `ranking` over the vertices.
+
+    Params:
+    - graph: Input graph
+    - sample_vertices_size: number of vertices to sample
+        (with replacement so actual number might be lower)
+    - ranking: probability distribution over the input graph vertices
+    - rng: Random generator
+
+    Returns:
+    A valid random subgraph
+
+    """
+    ranks = list(ranking(graph).items())
+    vertices, weights = zip(*ranks)
+    sampled_vertices = set(rng.choices(vertices, weights, k=int(sample_vertices_size)))
+    return graph.subgraph(sampled_vertices)
+
+
+def pagerank_sample(
+        graph: DirectedGraph[NodeType],
+        sample_vertices_size: int,
+        rng: random.Random,
+        **kwargs) -> DirectedGraph[NodeType]:
+    """
+    Sample a random subgraph of `graph` with respect to vertices PageRank scores.
+
+    Details of other parameters: see `sample`
+    Pagerank calculation: see `networkx.pagerank`
+    NB: `kwargs are all passed to `networkx.pagerank`
+    """
+    return sample(
+        graph, sample_vertices_size, lambda g: pagerank(g, **kwargs), rng)
+
+
+def hubs_sample(
+        graph: DirectedGraph[NodeType],
+        sample_vertices_size: int,
+        rng: random.Random,
+        **kwargs) -> DirectedGraph[NodeType]:
+    """
+    Sample a random subgraph of `graph` with respect to vertices HITS hubs scores.
+
+    Details of other parameters: see `sample`
+    Pagerank calculation: see `networkx.hits`
+    NB: `kwargs are all passed to `networkx.hits`
+    """
+    return sample(
+        graph, sample_vertices_size, lambda g: hits(g, **kwargs)[0], rng)
+
+
+def authorities_sample(
+        graph: DirectedGraph[NodeType],
+        sample_vertices_size: int,
+        rng: random.Random,
+        **kwargs) -> DirectedGraph[NodeType]:
+    """
+    Sample a random subgraph of `graph` with respect to vertices HITS authorities scores.
+
+    Details of other parameters: see `sample`
+    Pagerank calculation: see `networkx.hits`
+    NB: `kwargs are all passed to `networkx.hits`
+    """
+    return sample(
+        graph, sample_vertices_size, lambda g: hits(g, **kwargs)[1], rng)
+
+
+def uniform_sample(
+        graph: DirectedGraph[NodeType],
+        sample_vertices_size: int,
+        rng: random.Random) -> DirectedGraph[NodeType]:
+    """
+    Sample a random subgraph of `graph` with a uniform probability over vertices
+
+    Details of parameters: see `sample`
+    """
+    n = len(graph)
+    return sample(graph, sample_vertices_size,
+                  lambda G: {v: 1.0/n for v in G}, rng)
+
+def random_walk_vertex_sample(
+        graph: DirectedGraph[NodeType],
+        rng: random.Random,
+        n_iter: int,
+        seeds: Optional[Iterable[NodeType]] = None,
+        n_seeds: int = 1,
+        use_opposite: bool = False) -> DirectedGraph[NodeType]:
+    """
+    Random Walk graph vertex subsampling
+
+    Params:
+    - graph: the input graph
+    - rng: random number generator to use
+    - n_iter: number of iterations
+    - seeds: to root the walk on specific vertices
+    - n_seeds: to start random walk on specified number of uniformly selected vertices
+    - use_opposite: if True, randomly walk either direct or dual graph fairly
+
+    Returns: a valid subgraph, where all edges existing between sampled vertices are kept
+    """
+    if len(graph) == 0:
+        return DiGraph()
+    elif seeds is None:
+        sampled_vertices = list(rng.choices(list(graph), k=n_seeds))
+    else:
+        sampled_vertices = list(seeds)
+
+    i = 0
+    while i < n_iter:
+        i += 1
+        v = rng.choice(sampled_vertices)
+        use_op = use_opposite and rng.randint(0, 1) # Flip a coin
+        connected_vertices = list(graph.op[v] if use_op else graph[v])
+        if connected_vertices:
+            sampled_vertices.append(rng.choice(connected_vertices))
+    return graph.subgraph(sampled_vertices)
+
+
+def random_walk_edge_sample(
+        graph: DirectedGraph[NodeType],
+        rng: random.Random,
+        n_iter: int,
+        seeds: Optional[Iterable[ArrowType]] = None,
+        n_seeds: int = 1,
+        use_opposite: bool = False,
+        use_both_ends: bool = False) -> DirectedGraph[NodeType]:
+    """
+    Random Walk graph edge subsampling
+
+    Params:
+    - graph: the input graph
+    - rng: random number generator to use
+    - n_iter: number of iterations
+    - seeds: to root the walk on specific vertices
+    - n_seeds: to start random walk on specified number of uniformly selected vertices
+    - use_opposite: if True, randomly walk either direct or dual graph fairly
+    - use_both_ends: if True, randomly select either end of sampled edges for growing the walk
+
+    Returns: a valid subgraph
+
+    Given an edge 1->2 in the graph 0->1->2->3 + 1->4 + 5->2:
+    * use_opposite=False, use_both_ends=False:
+      -> only candidate is 2->3
+    * use_opposite=True, use_both_ends=False:
+      -> candidates are 2->3 and 5->2
+    * use_opposite=False, use_both_ends=True:
+      -> candidates are 2->3 and 1->4
+    * use_opposite=True, use_both_ends=True:
+      -> candidates are 2->3, 5->2, 1->4 and 0->1
+    """
+    if len(graph.edges) == 0:
+        return DirectedGraph()
+    elif seeds is None:
+        sampled_edges = list(rng.choices(list(graph.edges), k=n_seeds))
+    else:
+        sampled_edges = list(seeds)
+
+    i = 0
+    sampled_graph = DirectedGraph(sampled_edges)
+    while i < n_iter:
+        i += 1
+        e = rng.choice(sampled_edges)
+        use_op = use_opposite and rng.randint(0, 1) # Flip a coin
+        use_src = use_both_ends and rng.randint(0, 1) # Flip a coin
+        src = e[0] if use_src else e[1]
+        gview = graph.op if use_op else graph
+
+        compatible_edges = [
+            (dst, {}) for dst in gview[src] if not gview[src][dst]
+        ] + [
+            (dst, {k: v}) for dst in gview[src] for k,v in gview[src][dst].items()
+        ]
+        if compatible_edges:
+            dst, labels = rng.choice(compatible_edges)
+            if use_op:
+                sampled_graph[dst] = {src: labels}
+            else:
+                sampled_graph[src] = {dst: labels}
+    return sampled_graph
+
+
+def n_hop_sample(
+        graph: DiGraph[NodeType],
+        n_hops: int,
+        seeds: Optional[Iterable[ArrowType]] = None,
+        n_seeds: int = 1,
+        rng: Optional[random.Random] = None) -> DiGraph[NodeType]:
+    """
+    N-hop sampling from random or specified locations
+
+    Params:
+    - graph: the input graph
+    - n_hops: number of hops
+    - seeds: to root the walk on specific vertices
+    - n_seeds: to start random walk on specified number of uniformly selected vertices
+    - rng: random number generator to use, default to random.Random
+
+    Returns: a valid subgraph, where all edges existing between sampled vertices are kept
+    """
+    if len(graph) == 0 or n_hops <= 0:
+        return DiGraph()
+    elif seeds is None:
+        if rng is None:
+            rng = random.Random()
+        sampled_vertices = set(rng.choices(list(graph), k=n_seeds))
+    else:
+        sampled_vertices = set(seeds)
+
+    for _ in range(1, n_hops):  # Seed sampling is considered 1st hop
+        visited_vertices = set()
+        for v in sampled_vertices:
+            visited_vertices.update(list(graph[v]))
+        sampled_vertices |= visited_vertices
+    return graph.subgraph(sampled_vertices)
