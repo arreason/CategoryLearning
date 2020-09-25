@@ -14,7 +14,7 @@ import random
 import pickle
 
 import numpy as np
-from networkx import DiGraph, NetworkXError
+from networkx import DiGraph, NetworkXError, pagerank, hits
 
 NodeType = TypeVar("NodeType")
 
@@ -536,3 +536,129 @@ def generate_random_graph(
     # return a randomly chosen graph in the factory's memory
     idx = random_generator.randint(0, factory.nb_graphs - 1)
     return factory.graphs[idx]
+
+
+def sample(
+        igraph: DirectedGraph[NodeType],
+        sample_vertices_size: int,
+        ranking: Callable[[DirectedGraph[NodeType]], Mapping[NodeType, float]],
+        rng: random.Random) -> DirectedGraph[NodeType]:
+    """
+    Sample a random subgraph of `igraph` with respect to a probability
+    distribution `ranking` over the vertices.
+
+    Params:
+    - igraph: Input graph
+    - sample_vertices_size: number of vertices to sample
+        (with replacement so actual number might be lower)
+    - ranking: probability distribution over the input graph vertices
+    - rng: Random generator
+
+    Returns:
+    A valid random subgraph
+
+    """
+    ranks = list(ranking(igraph).items())
+    vertices = [v for v, _ in ranks]
+    weights = [w for _, w in ranks]
+    sampled_vertices = set(rng.choices(vertices, weights, k=int(sample_vertices_size)))
+    return igraph.subgraph(sampled_vertices)
+
+
+def pagerank_sample(
+        igraph: DirectedGraph[NodeType],
+        sample_vertices_size: int,
+        rng: random.Random,
+        **kwargs) -> DirectedGraph[NodeType]:
+    """
+    Sample a random subgraph of `igraph` with respect to vertices PageRank scores.
+
+    Details of other parameters: see `sample`
+    Pagerank calculation: see `networkx.pagerank`
+    NB: `kwargs are all passed to `networkx.pagerank`
+    """
+    return sample(
+        igraph, sample_vertices_size, lambda g: pagerank(g, **kwargs), rng)
+
+
+def hubs_sample(
+        igraph: DirectedGraph[NodeType],
+        sample_vertices_size: int,
+        rng: random.Random,
+        **kwargs) -> DirectedGraph[NodeType]:
+    """
+    Sample a random subgraph of `igraph` with respect to vertices HITS hubs scores.
+
+    Details of other parameters: see `sample`
+    Pagerank calculation: see `networkx.hits`
+    NB: `kwargs are all passed to `networkx.hits`
+    """
+    return sample(
+        igraph, sample_vertices_size, lambda g: hits(g, **kwargs)[0], rng)
+
+
+def authorities_sample(
+        igraph: DirectedGraph[NodeType],
+        sample_vertices_size: int,
+        rng: random.Random,
+        **kwargs) -> DirectedGraph[NodeType]:
+    """
+    Sample a random subgraph of `igraph` with respect to vertices HITS authorities scores.
+
+    Details of other parameters: see `sample`
+    Pagerank calculation: see `networkx.hits`
+    NB: `kwargs are all passed to `networkx.hits`
+    """
+    return sample(
+        igraph, sample_vertices_size, lambda g: hits(g, **kwargs)[1], rng)
+
+
+def uniform_sample(
+        igraph: DirectedGraph[NodeType],
+        sample_vertices_size: int,
+        rng: random.Random) -> DirectedGraph[NodeType]:
+    """
+    Sample a random subgraph of `igraph` with a uniform probability over vertices
+
+    Details of parameters: see `sample`
+    """
+    n = len(igraph)
+    return sample(igraph, sample_vertices_size,
+                  lambda G: {v: 1.0/n for v in G}, rng)
+
+def random_walk_sample(
+        igraph: DirectedGraph[NodeType],
+        rng: random.Random,
+        max_path_len: int,
+        seeds: Optional[Iterable[NodeType]] = None,
+        n_seeds: NodeType = 1,
+        use_opposite: bool = False) -> DirectedGraph[NodeType]:
+    """
+    Random Walk graph subsampling
+
+    Params:
+    - igraph: the input graph
+    - rng: random number generator to use
+    - max_path_len: maximum path length
+    - seeds: to root the walk on specific vertices
+    - n_seeds: to start random walk on specified number of uniformly selected vertices
+    - use_opposite: if true, randomly walk either direct or dual graph fairly
+
+    Returns: a valid subgraph
+    """
+    if seeds is None:
+        sampled_vertices = list(rng.choices(list(igraph), k=n_seeds))
+        max_iter = max_path_len * n_seeds
+    else:
+        sampled_vertices = list(seeds)
+        max_iter = max_path_len * len(seeds)
+
+    i = 0
+    while i < max_iter:
+        i += 1
+        v = rng.choice(sampled_vertices)
+        use_op = use_opposite and rng.randint(0, 1) # Flip a coin
+        connected_vertices = list(igraph.op[v] if use_op else igraph[v])
+        if connected_vertices:
+            sampled_vertices.append(rng.choice(connected_vertices))
+    return igraph.subgraph(sampled_vertices)
