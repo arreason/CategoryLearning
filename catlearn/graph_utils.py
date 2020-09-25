@@ -309,16 +309,18 @@ class DirectedGraph(Generic[NodeType], DiGraph, abc.MutableMapping):  # pylint: 
             "pruning_factor should be a number between 0. and 1.")
         nb_to_prune = int(np.floor(pruning_factor * len(self)))
 
-        # draw nodes to be pruned
+        # Node sampler
         if random_generator is None:
-            to_prune = random.sample(
-                list(self), k=nb_to_prune)  # type: ignore
+            choice = lambda g: random.choice(g)
         else:
-            to_prune = random_generator.sample(
-                list(self), k=nb_to_prune)  # type: ignore
+            choice = lambda g: random_generator.choice(g)
 
         # prune nodes
-        for node in to_prune:
+        for _ in range(nb_to_prune):
+            if len(self) == 0: # Choice function requires non-empty collections
+                break
+            # Draw node to prune
+            node = choice(list(self)) # type: ignore
             self.prune(node)
 
         return self
