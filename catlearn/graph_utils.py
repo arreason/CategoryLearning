@@ -135,9 +135,9 @@ class DirectedGraph(Generic[NodeType], DiGraph, abc.MutableMapping):  # pylint: 
         Prune a node out of the graph, but making sure that for any subgraph
         i -> pruned_node -> j, there is a i -> j vertex added
         """
-        # get parents and children of node
-        parents = self.op[node].copy()
-        children = self[node].copy()
+        # get parents and children of node - filter out self-reference
+        parents = [v for v in self.op[node].copy() if v != node]
+        children = [v for v in self[node].copy() if v != node]
 
         # delete node
         del self[node]
@@ -332,7 +332,7 @@ class DirectedAcyclicGraph(DirectedGraph[NodeType]):
     """
     def __init__(self, *args, **kwargs) -> None:
         """
-            Create an acyclic directed graph from a dictinary.
+            Create an acyclic directed graph from a dictionary.
         """
 
         # init self as directed graph
