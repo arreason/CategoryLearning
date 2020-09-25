@@ -498,9 +498,11 @@ class GraphRandomFactory:
             for op_nargs in ops_nargs)
 
         # get operands for each operation, with their right variance
+        # Use reverse with copy instead of op, otherwise we get a 'frozen'
+        # view into the graph and we cannot prune it
         operands = (
             map(
-                lambda graph, var: graph if var else graph.op,
+                lambda graph, var: graph if var else graph.reverse(copy=True),
                 self._random_generator.choices(self.graphs, k=op_nargs),
                 ops_vars)
             for op_nargs, ops_vars in zip(ops_nargs, operands_variance))
