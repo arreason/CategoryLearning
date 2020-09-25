@@ -135,11 +135,11 @@ class DirectedGraph(Generic[NodeType], DiGraph, abc.MutableMapping):  # pylint: 
         Prune a node out of the graph, but making sure that for any subgraph
         i -> pruned_node -> j, there is a i -> j vertex added
         """
-        # get parents and children of node - filter out self-reference
-        parents = [v for v in self.op[node].copy() if v != node]
-        children = [v for v in self[node].copy() if v != node]
+        # get parents and children of node
+        parents = self.op[node]
+        children = self[node]
 
-        # delete node
+        # delete node - will handle self (x->x) and back reference (x->y->x)
         del self[node]
 
         # add children to all parents' children sets
