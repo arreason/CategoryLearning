@@ -19,7 +19,9 @@ import pytest
 from tests.test_tools import pytest_generate_tests
 
 from catlearn.graph_utils import (
-    DirectedGraph, DirectedAcyclicGraph, GraphRandomFactory)
+    DirectedGraph, DirectedAcyclicGraph, GraphRandomFactory,
+    sample, pagerank_sample, hubs_sample, authorities_sample,
+    uniform_sample, random_walk_sample)
 
 
 @pytest.fixture(params=[0, 432358, 98765, 326710, 54092])
@@ -507,3 +509,103 @@ class TestGraphRandomFactory:
 
         assert all(
             repeat(next(first_factory) == next(second_factory), nb_steps))  # type: ignore
+
+
+class TestSubgraphSampling:
+
+    @staticmethod
+    def get_graph(rng):
+        """
+        Randomly create somewhat complex graphs, then return a complex one
+        """
+        factory = GraphRandomFactory(
+            [0.15, 0.15, 0.15, 0.15, 0.14],
+            10, 0.15, rng)
+        # go through generation steps
+        for _ in range(5):
+            next(factory)  # type: ignore
+        return factory.graphs[0]
+
+    def test_sample(self):
+        """ Test sample respect given probability distribution """
+        pass
+
+    def test_uniform(self):
+        """ Sanity checks on uniform sampler """
+        rng = random.Random()
+        g = self.get_graph(rng)
+        n_vertices = max(1, len(g) - 4)
+        sg = uniform_sample(g, n_vertices, rng)
+        assert 1 <= len(sg) <= n_vertices
+        assert all(v in g for v in sg)
+
+    # Sometimes the RandomFactory fails (erode) or the algorithm does not converge
+    @pytest.mark.flaky(reruns=3)
+    def test_pagerank(self):
+        """ Sanity checks on pagerank sampler """
+        rng = random.Random()
+        g = self.get_graph(rng)
+        n_vertices = max(1, len(g) - 4)
+        sg = pagerank_sample(g, n_vertices, rng)
+        assert 1 <= len(sg) <= n_vertices
+
+    # Sometimes the RandomFactory fails (erode) or the algorithm does not converge
+    @pytest.mark.flaky(reruns=3)
+    def test_hubs(self):
+        """ Sanity checks on hubs sampler """
+        rng = random.Random()
+        g = self.get_graph(rng)
+        n_vertices = max(1, len(g) - 4)
+        sg = hubs_sample(g, n_vertices, rng)
+        assert 1 <= len(sg) <= n_vertices
+
+    # Sometimes the RandomFactory fails (erode) or the algorithm does not converge
+    @pytest.mark.flaky(reruns=3)
+    def test_authorities(self):
+        """ Sanity checks on authorities sampler """
+        rng = random.Random()
+        g = self.get_graph(rng)
+        n_vertices = max(1, len(g) - 4)
+        sg = authorities_sample(g, n_vertices, rng)
+        assert 1 <= len(sg) <= n_vertices
+
+    # Sometimes the RandomFactory fails (erode)
+    @pytest.mark.flaky(reruns=3)
+    def test_random_walk(self):
+        """ Sanity check on random walk sampler """
+        rng = random.Random()
+        g = self.get_graph(rng)
+        sg = random_walk_sample(g, rng, 10)
+        assert 1 <= len(sg) <= 10
+
+    # Sometimes the RandomFactory fails (erode)
+    @pytest.mark.flaky(reruns=3)
+    def test_random_specified_root(self):
+        """ Sanity check on random walk sampler """
+        rng = random.Random()
+        g = self.get_graph(rng)
+        seed = rng.choice(list(g))
+        sg = random_walk_sample(g, rng, 12, seeds=[seed])
+        assert 1 <= len(sg) <= 12
+        assert len(sg.op[seed]) <= 1 # empty, or self-reference
+
+    # Sometimes the RandomFactory fails (erode)
+    @pytest.mark.flaky(reruns=3)
+    def test_random_walk_multiple_roots(self):
+        """ Sanity check on random walk sampler """
+        rng = random.Random()
+        n_seeds = 3
+        g = self.get_graph(rng)
+        sg = random_walk_sample(g, rng, 5, n_seeds=n_seeds)
+        assert 1 <= len(sg) <= 5 * n_seeds
+        # Assert we have at most 3 roots
+        assert 1 <= sum(1 for v in sg.op if len(v) <= 1) <= n_seeds
+
+    # Sometimes the RandomFactory fails (erode)
+    @pytest.mark.flaky(reruns=3)
+    def test_random_walk_with_dual(self):
+        """ Sanity check on random walk sampler """
+        rng = random.Random()
+        g = self.get_graph(rng)
+        sg = random_walk_sample(g, rng, 8, use_opposite=True)
+        assert 1 <= len(sg) <= 8
