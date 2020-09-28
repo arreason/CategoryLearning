@@ -385,10 +385,10 @@ class RelationCache(
                     scores[arrow] - max(other_scores, default=-inf), 0.)
 
         # identify worst relation
-        to_remove = min(utility, key=lambda arr: utility[arr])
+        to_remove = min(utility, key=lambda arr: utility[arr], default=None)
 
         # remove it from all dicts
-        if isfinite(utility[to_remove]):
+        if to_remove and isfinite(utility[to_remove]):
             del self[to_remove]
             return to_remove
 
