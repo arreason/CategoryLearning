@@ -183,6 +183,16 @@ class TestRelationCache:
     """
     Tests for RelationCache class
     """
+    params: Dict[str, List[Any]] = {
+        "test_prune": [
+            dict(nb_to_prune=0),
+            dict(nb_to_prune=1),
+            dict(nb_to_prune=2),
+            dict(nb_to_prune=-1),
+            dict(nb_to_prune=-2),
+        ]
+    }
+
     @staticmethod
     def get_cache(
             relation: RelationModel,
@@ -351,21 +361,31 @@ class TestRelationCache:
             relation: RelationModel,
             label_universe: Mapping[int, Tsor],
             scoring: ScoringModel, algebra: Algebra,
-            arrow: CompositeArrow[int, Tsor]) -> None:
+            arrow: CompositeArrow[int, Tsor],
+            nb_to_prune: int) -> None:
         """
-            Test pruning operation
+            Test pruning operation.
+            If nb_to_prune is a positive integer, tries to prune nb_to_prune
+            relations
+            If nb_to_prune is a negative integer, tries to keep at most
+            nb_to_prune relations + 1
         """
         # create cache with one composite arrow
         cache = TestRelationCache.get_cache(
             relation, label_universe,
             scoring, algebra, nb_features, arrow)
 
-        # prune half of points
-        cache_size = len(cache)
-        pruned = cache.prune_relations(cache_size // 2)
+        # target number of relations to keep
+        nb_to_keep = (
+            len(cache) - nb_to_prune if nb_to_prune >= 0
+            else nb_to_prune + 1)
 
+        # prune half of points
+        pruned = cache.prune_relations(nb_to_keep)
+
+        assert(all(data not in cache for data in pruned))
         assert(
-            len(cache) <= cache_size // 2
+            len(cache) <= nb_to_keep
             or all(
                 len(list(cache.arrows(relation[0], relation[-1])))
                 for relation in cache.arrows() if len(relation) == 1))
