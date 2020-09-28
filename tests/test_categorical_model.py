@@ -383,7 +383,7 @@ class TestRelationCache:
         # prune half of points
         pruned = cache.prune_relations(nb_to_keep)
 
-        assert(all(data not in cache for data in pruned))
+        assert all(data not in cache for data in pruned)
         assert(
             len(cache) <= nb_to_keep
             or all(
