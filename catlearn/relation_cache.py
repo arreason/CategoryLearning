@@ -380,9 +380,10 @@ class RelationCache(
                 scores[arr] for arr in self.arrows(src, tar)
                 if arr is not arrow)
 
+            arrow_utility = max(
+                scores[arrow] - max(other_scores, default=-inf), 0.)
             for idx in range(len(arrow)):
-                utility[arrow[idx:(idx + 1)]] += max(
-                    scores[arrow] - max(other_scores, default=-inf), 0.)
+                utility[arrow[idx:(idx + 1)]] += arrow_utility
 
         # identify worst relation
         to_remove = min(utility, key=lambda arr: utility[arr], default=None)
@@ -390,14 +391,14 @@ class RelationCache(
         # remove it from all dicts
         if to_remove and isfinite(utility[to_remove]):
             del self[to_remove]
-            return to_remove
+        return to_remove
 
     def prune_relations(
         self, nb_to_keep: int) -> List[CompositeArrow[NodeType, ArrowType]]:
         """
             Remove relations with a low score in the cache, and keep only
             nb_to_keep relations of each order.
-            Only remove 1st order arrows. arrows which are removed are those
+            Only remove 1st order arrows. Arrows which are removed are those
             with the lowest score relative to other arrows.
 
             Returns the list of pruned relations
@@ -407,7 +408,7 @@ class RelationCache(
             relation = (
                 None if len(self) <= nb_to_keep
                 else self._prune_worst_relation())
-            if relation is not None:
-                pruned.append(relation)
-                continue
-            return pruned
+            if relation is None:
+                break
+            pruned.append(relation)
+        return pruned
