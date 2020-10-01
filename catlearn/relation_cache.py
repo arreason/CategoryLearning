@@ -3,7 +3,7 @@ from typing import (
     Mapping, Callable, Iterable, Generic,
     Tuple, Iterator, Hashable, Optional, List)
 from collections import abc, defaultdict
-from math import isfinite, inf
+from math import inf
 
 import torch
 
@@ -357,14 +357,14 @@ class RelationCache(
 
         return result_graph
 
-    def _prune_worst_relation(self) -> Optional[
+    def _get_worst_relation(self) -> Optional[
             CompositeArrow[NodeType, ArrowType]]:
         """
-            Remove the relation with the lowest score in the cache.
-            Only remove 1st order arrows. arrows which are removed are those
+            Identify the relation with the lowest score in the cache.
+            Only looks at 1st order arrows. arrows which are removed are those
             with the lowest score relative to other arrows.
-
-            Returns the relation if it could be removed, None otherwise
+            If all relations have no alternatives and thus cannot be
+            removed, return None.
         """
         # create a dictionary of total scores of each arrow
         scores = {
@@ -386,11 +386,9 @@ class RelationCache(
                 utility[arrow[idx:(idx + 1)]] += arrow_utility
 
         # identify worst relation
-        to_remove = min(utility, key=lambda arr: utility[arr], default=None)
-
-        # remove it from all dicts
-        if to_remove and isfinite(utility[to_remove]):
-            del self[to_remove]
+        candidate_arrows = (arr for arr, val in utility.items() if val < inf)
+        to_remove = min(
+            candidate_arrows, key=lambda arr: utility[arr], default=None)
         return to_remove
 
     def prune_relations(
@@ -407,8 +405,8 @@ class RelationCache(
         while True:
             relation = (
                 None if len(self) <= nb_to_keep
-                else self._prune_worst_relation())
+                else self._get_worst_relation())
             if relation is None:
-                break
+                return pruned
+            del self[relation]
             pruned.append(relation)
-        return pruned
