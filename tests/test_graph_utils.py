@@ -594,16 +594,17 @@ class TestSubgraphSampling:
         seed = rng.choice(list(graph))
         sg = random_walk_sample(graph, rng, 12, seeds=[seed])
         assert 1 <= len(sg) <= 12
-        assert len(sg.over(seed)) <= 1 # empty, or self-reference
+        assert frozenset() <= sg.over(seed) <= frozenset(seed) # empty, or self-reference
 
     @staticmethod
     def test_random_walk_multiple_roots(rng, graph):
         """ Sanity check on random walk sampler """
         n_seeds = 3
-        sg = random_walk_sample(graph, rng, 5, n_seeds=n_seeds)
+        sg = random_walk_sample(graph, rng, 5, n_seeds=n_seeds, use_opposite=False)
         assert 1 <= len(sg) <= 5 * n_seeds
         # Assert we have at most n_seeds roots
-        assert 1 <= sum(1 for v in sg if len(sg.over(v)) <= 1) <= n_seeds
+        isRoot = lambda v: frozenset() <= sg.over(v) <= frozenset(v)
+        assert 1 <= sum(1 for v in sg if isRoot(v)) <= n_seeds
 
     @staticmethod
     def test_random_walk_with_dual(rng, graph):
