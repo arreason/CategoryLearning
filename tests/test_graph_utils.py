@@ -538,9 +538,14 @@ class TestSubgraphSampling:
         """
         return generate_random_graph(nb_steps, rng)
 
-    def test_sample(self, rng, graph):
-        """ Test sample respect a given probability distribution """
-        assert False
+    @staticmethod
+    def test_sample(rng, graph):
+        """ Test sample respect a simple probability distribution: only first k nodes """
+        firsts = frozenset(list(graph)[:5])
+        ranking = lambda g: {v: 1.0 if v in firsts else 0.0 for v in g}
+        sg = sample(graph, len(graph), ranking, rng)
+        selected = frozenset(list(sg))
+        assert selected <= firsts
 
     @staticmethod
     def test_uniform(rng, graph):
