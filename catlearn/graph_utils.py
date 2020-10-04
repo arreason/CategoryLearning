@@ -563,8 +563,7 @@ def sample(
 
     """
     ranks = list(ranking(graph).items())
-    vertices = [v for v, _ in ranks]
-    weights = [w for _, w in ranks]
+    vertices, weights = zip(*ranks)
     sampled_vertices = set(rng.choices(vertices, weights, k=int(sample_vertices_size)))
     return graph.subgraph(sampled_vertices)
 
