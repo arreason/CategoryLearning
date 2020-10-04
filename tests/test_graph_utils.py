@@ -512,10 +512,14 @@ class TestGraphRandomFactory:
 
 
 class TestSubgraphSampling:
+    """
+    Subgraph sampling test suite
+    """
 
     @staticmethod
     @pytest.fixture
     def rng():
+        """ Return PRNG to use in the test """
         return random.Random()
 
     @staticmethod
