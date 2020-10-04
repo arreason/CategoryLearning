@@ -17,6 +17,7 @@ import numpy as np
 from networkx import DiGraph, NetworkXError, pagerank, hits
 
 NodeType = TypeVar("NodeType")
+ArrowType = TypeVar("ArrowType")
 
 
 def mapping_product(mapping0: Mapping, mapping1: Mapping) -> Iterator:
@@ -629,35 +630,35 @@ def uniform_sample(
     return sample(graph, sample_vertices_size,
                   lambda G: {v: 1.0/n for v in G}, rng)
 
-def random_walk_sample(
+def random_walk_vertex_sample(
         graph: DirectedGraph[NodeType],
         rng: random.Random,
-        max_path_len: int,
+        n_iter: int,
         seeds: Optional[Iterable[NodeType]] = None,
-        n_seeds: NodeType = 1,
+        n_seeds: int = 1,
         use_opposite: bool = False) -> DirectedGraph[NodeType]:
     """
-    Random Walk graph subsampling
+    Random Walk graph vertex subsampling
 
     Params:
     - graph: the input graph
     - rng: random number generator to use
-    - max_path_len: maximum path length
+    - n_iter: number of iterations
     - seeds: to root the walk on specific vertices
     - n_seeds: to start random walk on specified number of uniformly selected vertices
-    - use_opposite: if true, randomly walk either direct or dual graph fairly
+    - use_opposite: if True, randomly walk either direct or dual graph fairly
 
-    Returns: a valid subgraph
+    Returns: a valid subgraph, where all edges existing between sampled vertices are kept
     """
-    if seeds is None:
+    if len(graph) == 0:
+        return DiGraph()
+    elif seeds is None:
         sampled_vertices = list(rng.choices(list(graph), k=n_seeds))
-        max_iter = max_path_len * n_seeds
     else:
         sampled_vertices = list(seeds)
-        max_iter = max_path_len * len(seeds)
 
     i = 0
-    while i < max_iter:
+    while i < n_iter:
         i += 1
         v = rng.choice(sampled_vertices)
         use_op = use_opposite and rng.randint(0, 1) # Flip a coin
@@ -665,3 +666,66 @@ def random_walk_sample(
         if connected_vertices:
             sampled_vertices.append(rng.choice(connected_vertices))
     return graph.subgraph(sampled_vertices)
+
+
+def random_walk_edge_sample(
+        graph: DirectedGraph[NodeType],
+        rng: random.Random,
+        n_iter: int,
+        seeds: Optional[Iterable[ArrowType]] = None,
+        n_seeds: int = 1,
+        use_opposite: bool = False,
+        use_both_ends: bool = False) -> DirectedGraph[NodeType]:
+    """
+    Random Walk graph edge subsampling
+
+    Params:
+    - graph: the input graph
+    - rng: random number generator to use
+    - n_iter: number of iterations
+    - seeds: to root the walk on specific vertices
+    - n_seeds: to start random walk on specified number of uniformly selected vertices
+    - use_opposite: if True, randomly walk either direct or dual graph fairly
+    - use_both_ends: if True, randomly select either end of sampled edges for growing the walk
+
+    Returns: a valid subgraph
+
+    Given an edge 1->2 in the graph 0->1->2->3 + 1->4 + 5->2:
+    * use_opposite=False, use_both_ends=False:
+      -> only candidate is 2->3
+    * use_opposite=True, use_both_ends=False:
+      -> candidates are 2->3 and 5->2
+    * use_opposite=False, use_both_ends=True:
+      -> candidates are 2->3 and 1->4
+    * use_opposite=True, use_both_ends=True:
+      -> candidates are 2->3, 5->2, 1->4 and 0->1
+    """
+    if len(graph.edges) == 0:
+        return DirectedGraph()
+    elif seeds is None:
+        sampled_edges = list(rng.choices(list(graph.edges), k=n_seeds))
+    else:
+        sampled_edges = list(seeds)
+
+    i = 0
+    sampled_graph = DirectedGraph(sampled_edges)
+    while i < n_iter:
+        i += 1
+        e = rng.choice(sampled_edges)
+        use_op = use_opposite and rng.randint(0, 1) # Flip a coin
+        use_src = use_both_ends and rng.randint(0, 1) # Flip a coin
+        src = e[0] if use_src else e[1]
+        gview = graph.op if use_op else graph
+
+        compatible_edges = [
+            (dst, {}) for dst in gview[src] if not gview[src][dst]
+        ] + [
+            (dst, {k: v}) for dst in gview[src] for k,v in gview[src][dst].items()
+        ]
+        if compatible_edges:
+            dst, labels = rng.choice(compatible_edges)
+            if use_op:
+                sampled_graph[dst] = {src: labels}
+            else:
+                sampled_graph[src] = {dst: labels}
+    return sampled_graph
