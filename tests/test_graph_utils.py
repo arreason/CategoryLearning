@@ -194,7 +194,7 @@ class TestDirectedGraph:
                  expected_graph=DirectedGraph({0: [], 1: []})),
             dict(
                 graph=DirectedGraph({0.5: ["a"], "a": [], 2: [0.5, "a"]}),
-                expected_graph=DirectedGraph({0: [2], 2: [], 1: [0, 2]})
+                expected_graph=DirectedGraph({2: [1], 1: [], 0: [2, 1]})
                 )
             ],
         "test_stringify": [
@@ -202,7 +202,7 @@ class TestDirectedGraph:
                  expected_graph=DirectedGraph({"0x0": [], "0x1": []})),
             dict(graph=DirectedGraph({0.5: ["a"], "a": [], 2: [0.5, "a"]}),
                  expected_graph=DirectedGraph(
-                     {"0x0": ["0x2"], "0x2": [], "0x1": ["0x0", "0x2"]})
+                     {"0x2": ["0x1"], "0x1": [], "0x0": ["0x2", "0x1"]})
                  )
             ],
         "test_rand_prune": [
