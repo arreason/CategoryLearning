@@ -729,3 +729,38 @@ def random_walk_edge_sample(
             else:
                 sampled_graph[src] = {dst: labels}
     return sampled_graph
+
+
+def n_hop_sample(
+        graph: DiGraph[NodeType],
+        n_hops: int,
+        seeds: Optional[Iterable[ArrowType]] = None,
+        n_seeds: int = 1,
+        rng: Optional[random.Random] = None) -> DiGraph[NodeType]:
+    """
+    N-hop sampling from random or specified locations
+
+    Params:
+    - graph: the input graph
+    - n_hops: number of hops
+    - seeds: to root the walk on specific vertices
+    - n_seeds: to start random walk on specified number of uniformly selected vertices
+    - rng: random number generator to use, default to random.Random
+
+    Returns: a valid subgraph, where all edges existing between sampled vertices are kept
+    """
+    if len(graph) == 0 or n_hops <= 0:
+        return DiGraph()
+    elif seeds is None:
+        if rng is None:
+            rng = random.Random()
+        sampled_vertices = set(rng.choices(list(graph), k=n_seeds))
+    else:
+        sampled_vertices = set(seeds)
+
+    for _ in range(1, n_hops):  # Seed sampling is considered 1st hop
+        visited_vertices = set()
+        for v in sampled_vertices:
+            visited_vertices.update(list(graph[v]))
+        sampled_vertices |= visited_vertices
+    return graph.subgraph(sampled_vertices)

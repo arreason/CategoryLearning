@@ -22,7 +22,7 @@ from catlearn.graph_utils import (
     DirectedGraph, DirectedAcyclicGraph, GraphRandomFactory,
     sample, pagerank_sample, hubs_sample, authorities_sample,
     uniform_sample, random_walk_vertex_sample,
-    random_walk_edge_sample, generate_random_graph)
+    random_walk_edge_sample, n_hop_sample, generate_random_graph)
 
 
 @pytest.fixture(params=[0, 432358, 98765, 326710, 54092])
@@ -634,3 +634,15 @@ class TestSubgraphSampling:
             graph, rng, n_iter, n_seeds=n_seeds,
             use_opposite=True, use_both_ends=True)
         assert 0 <= len(sg.edges) <= n_iter + n_seeds
+
+    @staticmethod
+    @pytest.fixture(params=[0, 1, 2])
+    def n_hops(request: Any) -> int:
+        """ Number of hops """
+        return request.param
+
+    @staticmethod
+    def test_n_hop_sampler(graph, rng, n_hops, n_seeds):
+        """ Sanity checks on n_hop sampler """
+        sg = n_hop_sample(graph, n_hops, n_seeds=n_seeds, rng=rng)
+        assert all(v in graph for v in sg)
