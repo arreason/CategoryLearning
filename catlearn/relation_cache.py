@@ -361,7 +361,7 @@ class RelationCache(
             CompositeArrow[NodeType, ArrowType]]:
         """
             Identify the relation with the lowest score in the cache.
-            Only looks at 1st order arrows. arrows which are removed are those
+            Only looks at 1st order arrows. Arrows which are removed are those
             with the lowest score relative to other arrows.
             If all relations have no alternatives and thus cannot be
             removed, return None.
