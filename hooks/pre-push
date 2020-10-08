@@ -21,7 +21,7 @@
 
 remote="$1"
 url="$2"
-repo="catlearn"
+repo="Recat-ML"
 
 # Verify commit naming convention
 z40=0000000000000000000000000000000000000000
@@ -93,15 +93,11 @@ pylint_check "catlearn/" 2#000011
 # Run pylint on the tests
 pylint_check "tests/" 2#000011 "no-self-use,duplicate-code"
 
+# Type check on package
+type_check "catlearn/"
 
-# Github #23 - https://github.com/arreason/CategoryLearning/issues/23
-# Deactivate mypy checks, since we have a handful of outstanding errors/warnings
-#
-# # Type check on package
-# type_check "catlearn/"
-#
-# # Type check on tests
-# type_check "tests/"
+# Type check on tests
+type_check "tests/"
 
 # Execute unit tests
 py.test -sv --exitfirst --durations=15 --cov=catlearn/ --no-cov-on-fail
