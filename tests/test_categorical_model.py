@@ -378,7 +378,7 @@ class TestRelationCache:
         # target number of relations to keep
         nb_to_keep = (
             len(cache) - nb_to_prune if nb_to_prune >= 0
-            else nb_to_prune + 1)
+            else -nb_to_prune + 1)
 
         # prune half of points
         pruned = cache.prune_relations(nb_to_keep)
