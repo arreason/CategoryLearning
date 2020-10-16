@@ -11,8 +11,10 @@ Utilities for graphs with composite arrows
 from __future__ import annotations
 from typing import (
     TypeVar, Generic, Optional, Union, Iterable, Tuple, Iterator, Callable)
+from numbers import Number
 from collections import abc
 from itertools import chain
+from math import inf
 
 from catlearn.graph_utils import DirectedGraph, NodeType
 
@@ -302,31 +304,43 @@ class CompositionGraph(Generic[NodeType, ArrowType, AlgebraType], abc.Mapping): 
 
     def arrows(
             self, src: Optional[NodeType] = None,
-            tar: Optional[NodeType] = None
+            tar: Optional[NodeType] = None,
+            arrow_length_range: Tuple[Number, Number] = (0, inf)
         ) -> Iterator[CompositeArrow[NodeType, ArrowType]]:
         """
         Get an iterator over all arrows starting at src and ending at tar.
         If source or tar is None, will loop through all possible sources
         and arrows.
         If no existing arrows (or src/tar not in the underlying graph),
-        returns an empty iterator
+        returns an empty iterator.
+        An arrow length range can also be specified. In this case,
+        only arrows with a length in the specified range are returned
         """
-        if src is None and tar is None:
-            # iterate over all edges of graph in this case
-            return iter(self)
         if (
                 src is not None and tar is not None
                 and self.graph.has_edge(src, tar)):
             # iterate over all edges from src to tar
-            return (arr.suspend(src, tar) for arr in self.graph[src][tar])
+            return (
+                arr.suspend(src, tar) for arr in self.graph[src][tar]
+                if (
+                    len(arr) >= arrow_length_range[0]
+                    and len(arr) < arrow_length_range[1]))
         if src is not None and tar is None and src in self.graph:
             # iterate over all edges starting at src
             return chain(*(
-                self.arrows(src, node) for node in self.graph[src]))
+                self.arrows(src, node, arrow_length_range=arrow_length_range)
+                for node in self.graph[src]))
         if src is None and tar is not None and tar in self.graph:
             # iterate over all edges ending at tar
             return chain(*(
-                self.arrows(node, tar) for node in self.graph.op[tar]))
+                self.arrows(node, tar, arrow_length_range=arrow_length_range)
+                for node in self.graph.op[tar]))
+        if src is None and tar is None:
+            # iterate over all edges of graph in this case
+            return chain(*(
+                self.arrows(node, None, arrow_length_range=arrow_length_range)
+                for node in self.graph.nodes
+            ))
 
         return iter(())
 
