@@ -1,6 +1,6 @@
 from types import MappingProxyType
 from typing import (
-    Mapping, Callable, Iterable, Generic,
+    Mapping, Callable, Iterable, Generic, Set,
     Tuple, Iterator, Hashable, Optional, List)
 from collections import abc, defaultdict
 from numbers import Number
@@ -358,6 +358,34 @@ class RelationCache(
                 return pruned
             del self[relation]
             pruned.append(relation)
+
+    def build_composites(
+        self, max_arrow_number,
+    ) -> MappingProxyType[int, Set[CompositeArrow[NodeType, ArrowType]]]:
+        """
+        Build composites at each order, until max_arrow_number is reached
+        """
+        order = 1
+        added_arrows = defaultdict(set)
+        while len(self)<max_arrow_number:
+
+            # loop through length n arrows and try to extend them by 1
+            for arr in self.arrows(
+                arrow_length_range=(order, order + 1), include_non_causal=False,
+            ):
+                for label, tar in self.graph[arr]:
+                    arr_candidate = arr + CompositeArrow(
+                        (arr[-1], tar), (label,))
+                    if arr_candidate[1:] in self:
+                        self.add(arr_candidate)
+                        added_arrows[order + 1].add(arr_candidate)
+
+            # drop arrows above the limit
+            self.prune_relations(max_arrow_number)
+
+            order += 1
+
+        return MappingProxyType(added_arrows)
 
     def match(
             self, labels: DirectedGraph[NodeType],
