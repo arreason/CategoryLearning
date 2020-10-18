@@ -361,7 +361,7 @@ class RelationCache(
 
     def build_composites(
         self, max_arrow_number,
-    ) -> MappingProxyType[int, Set[CompositeArrow[NodeType, ArrowType]]]:
+    ) -> Mapping[int, Set[CompositeArrow[NodeType, ArrowType]]]:
         """
         Build composites at each order, until max_arrow_number is reached
         """
