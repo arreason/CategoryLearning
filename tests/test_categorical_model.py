@@ -26,12 +26,12 @@ from catlearn.categorical_model import (
     RelationModel, ScoringModel,
     DecisionCatModel, TrainableDecisionCatModel)
 from catlearn.algebra_models import (
-    Algebra, VectAlgebra, MatrixAlgebra, AffineAlgebra)
+    Algebra, VectAlgebra, VectMultAlgebra, MatrixAlgebra, AffineAlgebra)
 
 
 # List of algebras to verify
 # Automagic, adding an algebra will get tested right away
-CLASSES_TO_TEST = {VectAlgebra, MatrixAlgebra, AffineAlgebra}
+CLASSES_TO_TEST = {VectAlgebra, VectMultAlgebra, MatrixAlgebra, AffineAlgebra}
 
 
 # path to the data of the generators used for synthetic datasets
@@ -190,6 +190,11 @@ class TestRelationCache:
             dict(nb_to_prune=2),
             dict(nb_to_prune=-1),
             dict(nb_to_prune=-2),
+        ],
+        "test_build_composites": [
+            dict(max_arrow_length=1, max_arrow_number=100),
+            dict(max_arrow_length=2, max_arrow_number=100),
+            dict(max_arrow_length=10, max_arrow_number=100),
         ]
     }
 
@@ -380,14 +385,18 @@ class TestRelationCache:
             len(cache) - nb_to_prune if nb_to_prune >= 0
             else -nb_to_prune + 1)
 
-        # prune half of points
+        initial_content = frozenset(cache)
+
         pruned = cache.prune_relations(nb_to_keep)
 
-        assert all(data not in cache for data in pruned)
+        final_content = frozenset(cache)
+
+        assert initial_content == (final_content ^ pruned)
+
         assert(
             len(cache) <= nb_to_keep
             or all(
-                len(list(cache.arrows(relation[0], relation[-1])))
+                len(list(cache.arrows(relation[0], relation[-1]))) == 1
                 for relation in cache.arrows() if len(relation) == 1))
 
 

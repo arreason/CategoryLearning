@@ -1,7 +1,7 @@
 from types import MappingProxyType
 from typing import (
-    Mapping, Callable, Iterable, Generic, Set,
-    Tuple, Iterator, Hashable, Optional, List)
+    Mapping, Callable, Iterable, Generic,
+    Tuple, Iterator, Hashable, Optional, FrozenSet)
 from collections import abc, defaultdict
 from numbers import Number
 from math import inf
@@ -340,7 +340,8 @@ class RelationCache(
         return to_remove
 
     def prune_relations(
-        self, nb_to_keep: int) -> List[CompositeArrow[NodeType, ArrowType]]:
+        self, nb_to_keep: int) -> FrozenSet[
+            CompositeArrow[NodeType, ArrowType]]:
         """
             Remove relations with a low score in the cache, and keep only
             nb_to_keep relations of each order.
@@ -349,43 +350,58 @@ class RelationCache(
 
             Returns the list of pruned relations
         """
-        pruned = []
+        pruned = set()
         while True:
             relation = (
                 None if len(self) <= nb_to_keep
                 else self._get_worst_relation())
             if relation is None:
-                return pruned
+                return frozenset(pruned)
             del self[relation]
-            pruned.append(relation)
+            pruned.add(relation)
 
     def build_composites(
         self, max_arrow_number,
-    ) -> Mapping[int, Set[CompositeArrow[NodeType, ArrowType]]]:
+    ) -> Tuple[
+        FrozenSet[CompositeArrow[NodeType, ArrowType]],
+        FrozenSet[CompositeArrow[NodeType, ArrowType]]]:
         """
         Build composites at each order, until max_arrow_number is reached
         """
+        content_before_update = set(self)
+
         order = 1
-        added_arrows = defaultdict(set)
-        while len(self)<max_arrow_number:
+        while True:
+
+            added_arrows = set()
 
             # loop through length n arrows and try to extend them by 1
             for arr in self.arrows(
                 arrow_length_range=(order, order + 1), include_non_causal=False,
             ):
+
                 for label, tar in self.graph[arr]:
                     arr_candidate = arr + CompositeArrow(
                         (arr[-1], tar), (label,))
                     if arr_candidate[1:] in self:
                         self.add(arr_candidate)
-                        added_arrows[order + 1].add(arr_candidate)
+                        added_arrows.add(arr_candidate)
 
             # drop arrows above the limit
-            self.prune_relations(max_arrow_number)
+            removed_arrows = self.prune_relations(max_arrow_number)
+
+            # verify if any causal arrow was added. if not stop there
+            if all(
+                    self[arr].sum() <= 0
+                    for arr in added_arrows - removed_arrows):
+                break
 
             order += 1
 
-        return MappingProxyType(added_arrows)
+        content_after_update = set(self)
+        return (
+            frozenset(content_after_update - content_before_update),
+            frozenset(content_before_update - content_after_update))
 
     def match(
             self, labels: DirectedGraph[NodeType],
