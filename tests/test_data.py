@@ -19,7 +19,7 @@ class TestDataset:
     """
     Unit tests for Dataset class
     entity2id and relation2id are provided and not generated through Dataset
-    due to difficulty of managing multithreading randomness and mapping consistency. 
+    due to difficulty of managing multithreading randomness and mapping consistency.
     """
     params: Dict[str, List[Any]] = {
         'test_dataset': [
@@ -50,7 +50,11 @@ class TestDataset:
     def test_dataset(
             initializer_dict: Dict,
             expected_graph: DirectedGraph):
-        """Check that wn18 dataset format is read and formated properly
+        """Check that wn18 dataset format is read and formated properly.
+        Current test only covers reading embedding vectors from a file
+        (e.g. word2vec pre-computed embeddings). Default randomly generated embeddings
+        are not tested due to its trivial implementation and intrinsic randomness,
+        that is more difficult to test.
 
         Args:
             initializer_dict (Dict): String representing wn18 dataset format
@@ -73,4 +77,3 @@ class TestDataset:
             assert str(graph) == str(expected_graph)
             graph = DirectedGraph(ds.test)
             assert str(graph) == str(expected_graph)
-

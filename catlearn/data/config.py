@@ -1,4 +1,4 @@
-from typing import Dict, List, NewType
+from typing import Dict
 
 raw_dataset_pat: Dict[str, str] = {
     'train': 'train.txt',
@@ -17,4 +17,3 @@ preproc_pat: Dict[str, str] = {
     'test': 'test_pp.txt',
     'sep': '\t'
 }
-

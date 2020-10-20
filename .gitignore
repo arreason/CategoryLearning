@@ -28,9 +28,6 @@ MANIFEST
 # IDE settings
 .VSCodeCounter/
 
-# Datasets
-fb15k-237/
-
 # Debug
 debug/
 
