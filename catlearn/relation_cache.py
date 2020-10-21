@@ -3,7 +3,6 @@ from typing import (
     Mapping, Callable, Iterable, Generic,
     Tuple, Iterator, Hashable, Optional, FrozenSet)
 from collections import abc, defaultdict
-from numbers import Number
 from math import inf
 
 import torch
@@ -197,7 +196,7 @@ class RelationCache(
     def arrows(
             self, src: Optional[NodeType] = None,
             tar: Optional[NodeType] = None,
-            arrow_length_range: Tuple[Number, Number] = (0, inf),
+            arrow_length_range: Tuple[int, Optional[int]] = (0, None),
             include_non_causal: bool = True,
     ) -> Iterator[CompositeArrow[NodeType, ArrowType]]:
         """
@@ -369,31 +368,36 @@ class RelationCache(
         Build composites at each order, until max_arrow_number is reached
         """
         content_before_update = set(self)
+        max_order_before_update = max(len(arr) for arr in self)
 
         order = 1
         while True:
 
             added_arrows = set()
-
-            # loop through length n arrows and try to extend them by 1
+            # loop through length n arrows and try to extend them by 1 node
             for arr in self.arrows(
                 arrow_length_range=(order, order + 1), include_non_causal=False,
             ):
+                for extension in self.arrows(
+                    src=arr[-1], arrow_length_range=(1, 2)):
+                    arr_candidate = arr + extension
 
-                for label, tar in self.graph[arr]:
-                    arr_candidate = arr + CompositeArrow(
-                        (arr[-1], tar), (label,))
-                    if arr_candidate[1:] in self:
+                    # verify that candidate arrow's end is causal
+                    if (arr_candidate not in self and self.get(
+                            arr_candidate[1:],
+                            default=torch.zeros(1)).sum() > 0):
                         self.add(arr_candidate)
                         added_arrows.add(arr_candidate)
 
             # drop arrows above the limit
             removed_arrows = self.prune_relations(max_arrow_number)
 
-            # verify if any causal arrow was added. if not stop there
-            if all(
-                    self[arr].sum() <= 0
-                    for arr in added_arrows - removed_arrows):
+            # if we've not looked at all arrows already in the cache
+            # continue
+            # otherwise stop as soon as nothing new comes up
+            if not (order <= max_order_before_update or any(
+                    self[arr].sum() > 0
+                    for arr in added_arrows - removed_arrows)):
                 break
 
             order += 1

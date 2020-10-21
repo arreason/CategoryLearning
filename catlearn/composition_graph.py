@@ -11,7 +11,6 @@ Utilities for graphs with composite arrows
 from __future__ import annotations
 from typing import (
     TypeVar, Generic, Optional, Union, Iterable, Tuple, Iterator, Callable)
-from numbers import Number
 from collections import abc
 from itertools import chain
 from math import inf
@@ -305,7 +304,7 @@ class CompositionGraph(Generic[NodeType, ArrowType, AlgebraType], abc.Mapping): 
     def arrows(
             self, src: Optional[NodeType] = None,
             tar: Optional[NodeType] = None,
-            arrow_length_range: Tuple[Number, Number] = (0, inf)
+            arrow_length_range: Tuple[int, Optional[int]] = (0, None),
         ) -> Iterator[CompositeArrow[NodeType, ArrowType]]:
         """
         Get an iterator over all arrows starting at src and ending at tar.
@@ -316,6 +315,9 @@ class CompositionGraph(Generic[NodeType, ArrowType, AlgebraType], abc.Mapping): 
         An arrow length range can also be specified. In this case,
         only arrows with a length in the specified range are returned
         """
+        min_length = arrow_length_range[0]
+        max_length = arrow_length_range[1] if arrow_length_range[1] else inf
+
         if (
                 src is not None and tar is not None
                 and self.graph.has_edge(src, tar)):
@@ -323,8 +325,8 @@ class CompositionGraph(Generic[NodeType, ArrowType, AlgebraType], abc.Mapping): 
             return (
                 arr.suspend(src, tar) for arr in self.graph[src][tar]
                 if (
-                    len(arr) >= arrow_length_range[0]
-                    and len(arr) < arrow_length_range[1]))
+                    len(arr) >= min_length
+                    and len(arr) < max_length))
         if src is not None and tar is None and src in self.graph:
             # iterate over all edges starting at src
             return chain(*(
