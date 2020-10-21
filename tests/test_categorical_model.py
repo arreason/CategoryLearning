@@ -194,6 +194,7 @@ class TestRelationCache:
         "test_build_composites": [
             dict(max_arrow_length=1, max_arrow_number=100),
             dict(max_arrow_length=2, max_arrow_number=100),
+            dict(max_arrow_length=3, max_arrow_number=100),
             dict(max_arrow_length=10, max_arrow_number=100),
         ]
     }
@@ -398,6 +399,47 @@ class TestRelationCache:
             or all(
                 len(list(cache.arrows(relation[0], relation[-1]))) == 1
                 for relation in cache.arrows() if len(relation) == 1))
+
+    @staticmethod
+    def test_build_composites(
+        nb_labels: int,
+        arrow: CompositeArrow[int, Tsor],
+        max_arrow_length: int,
+        max_arrow_number: int,
+    ) -> None:
+        """
+            Test composite building.
+        """
+
+        def relation(src: Tsor, dst: Tsor, rel: int) -> Tsor:
+            return torch.ones(1)
+
+        singleton_universe = {i: torch.ones(1) for i in range(nb_labels)}
+
+        def scoring(src: Tsor, dst: Tsor, rel: Tsor):
+            return rel if dst - src <= max_arrow_length else torch.zeros(1)
+
+        scores_algebra = VectMultAlgebra(1)
+
+        complete_cache = TestRelationCache.get_cache(
+            relation, singleton_universe,
+            scoring, scores_algebra, 1,
+            arrow,
+        )
+
+        cache = TestRelationCache.get_cache(
+            relation, singleton_universe,
+            scoring, scores_algebra, 1,
+            *(arrow[idx:idx + 1] for idx in range(len(arrow))),
+        )
+        cache.build_composites(max_arrow_number=max_arrow_number)
+
+        assert (
+            frozenset(
+                complete_cache.arrows(
+                    include_non_causal=False,
+                    arrow_length_range=(0, max_arrow_length)))
+            == frozenset(cache.arrows(include_non_causal=False)))
 
 
 class TestDecisionCatModel:
