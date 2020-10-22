@@ -385,7 +385,7 @@ class RelationCache(
                     # verify that candidate arrow's end is causal
                     if (arr_candidate not in self and self.get(
                             arr_candidate[1:],
-                            default=torch.zeros(1)).sum() > 0):
+                            default=torch.zeros(0)).sum() > 0):
                         self.add(arr_candidate)
                         added_arrows.add(arr_candidate)
 

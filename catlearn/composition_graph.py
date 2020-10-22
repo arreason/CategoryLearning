@@ -322,11 +322,12 @@ class CompositionGraph(Generic[NodeType, ArrowType, AlgebraType], abc.Mapping): 
                 src is not None and tar is not None
                 and self.graph.has_edge(src, tar)):
             # iterate over all edges from src to tar
+            # careful to length: the derived arrow has length diminished by 1
             return (
                 arr.suspend(src, tar) for arr in self.graph[src][tar]
                 if (
-                    len(arr) >= min_length
-                    and len(arr) < max_length))
+                    len(arr) >= min_length - 1
+                    and len(arr) < max_length - 1))
         if src is not None and tar is None and src in self.graph:
             # iterate over all edges starting at src
             return chain(*(
