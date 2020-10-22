@@ -150,6 +150,7 @@ class RelationCache(
             comp: BinaryOp,
             datas: Mapping[NodeType, Tsor],
             arrows: Iterable[CompositeArrow[NodeType, ArrowType]],
+            max_arrow_number: Optional[int] = None,
             epsilon: float = DEFAULT_EPSILON) -> None:
         """
         Initialize a new cache of relations, from:
@@ -161,6 +162,12 @@ class RelationCache(
                and 1 relation value,
            comp: a composition operation returning a relation value from
                2 relation values (supposed associative)
+           datas: a dictionary containing the value of each node
+           arrows: a list of arrows to add to the underlying graph
+           max_arrow_number: if None, does nothing. If strictly positive,
+               the cache will attempt to build further composites of the
+               given arrows, until max_arrow_number of arrows is reached
+           epsilon: precision for numerical computations
         """
         self.epsilon = epsilon
         # base assumption: all arrows node supports should be in
@@ -192,6 +199,10 @@ class RelationCache(
         # fill the cache with provided arrows
         for arrow in arrows:
             self.add(arrow)
+
+        # build composites if max_arrow_number is provided
+        if max_arrow_number and max_arrow_number > 0:
+            self.build_composites(max_arrow_number=max_arrow_number)
 
     def arrows(
             self, src: Optional[NodeType] = None,
