@@ -414,12 +414,13 @@ class TestRelationCache:
         def relation(src: Tsor, dst: Tsor, rel: int) -> Tsor:
             return torch.ones(1)
 
-        singleton_universe = {i: torch.ones(1) for i in range(nb_labels)}
+        singleton_universe = {
+            i: torch.full((1,), 1./max_arrow_length) for i in range(nb_labels)}
 
         def scoring(src: Tsor, dst: Tsor, rel: Tsor):
-            return rel if dst - src <= max_arrow_length else torch.zeros(1)
+            return rel
 
-        scores_algebra = VectMultAlgebra(1)
+        scores_algebra = VectAlgebra(1)
 
         complete_cache = TestRelationCache.get_cache(
             relation, singleton_universe,
@@ -432,13 +433,14 @@ class TestRelationCache:
             scoring, scores_algebra, 1,
             *(arrow[idx:idx + 1] for idx in range(len(arrow))),
         )
+
         cache.build_composites(max_arrow_number=max_arrow_number)
 
         assert (
             frozenset(
                 complete_cache.arrows(
                     include_non_causal=False,
-                    arrow_length_range=(0, max_arrow_length)))
+                    arrow_length_range=(0, max_arrow_length + 1)))
             == frozenset(cache.arrows(include_non_causal=False)))
 
 
