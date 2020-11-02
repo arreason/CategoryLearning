@@ -423,8 +423,7 @@ class TestRelationCache:
             i: torch.ones(1) for i in range(nb_labels)}
 
         def scoring(src: Tsor, dst: Tsor, rel: Tsor):
-
-            return rel
+            return rel if dst - src < max_arrow_length else torch.zeros(1)
 
         scores_algebra = VectMultAlgebra(1)
 
