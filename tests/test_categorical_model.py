@@ -5,9 +5,9 @@
 """
 Tests for the categorical_model file.
 """
-from typing import Any, Dict, Mapping, Iterable, List, Callable
+from typing import Any, Dict, Mapping, Iterable, List, Callable, Optional
 from functools import reduce
-from itertools import combinations, product
+from itertools import combinations, product, chain
 from tempfile import NamedTemporaryFile
 from math import inf
 import random
@@ -206,19 +206,20 @@ class TestRelationCache:
             scoring: ScoringModel,
             algebra: Algebra,
             data_dim: int,
+            datas: Optional[Mapping[int, Tsor]],
             *arr: CompositeArrow[int, Tsor]) -> RelationCache:
         """
         get a relation cache, initialized with random data and one composite
         arrow if given (otherwise it is empty)
         """
-        if arr:
-            datas = {idx: torch.rand(data_dim) for idx in set().union(*arr)}  # type: ignore
-        else:
-            datas = {}
-            arr = ()
+        missing_points =  {
+            idx for idx in chain(*arr) if idx not in (datas or {})}
+        missing_datas = {
+            idx: torch.rand(data_dim) for idx in missing_points}  # type: ignore
 
         return RelationCache[int, Tsor](
-            relation, label_universe, scoring, algebra.comp, datas, arr)
+            relation, label_universe, scoring, algebra.comp,
+            {**(datas or {}), **missing_datas}, arr)
 
     @staticmethod
     def test_relation(
@@ -232,7 +233,8 @@ class TestRelationCache:
         """
         # create cache with one composite arrow
         cache = TestRelationCache.get_cache(
-            relation, label_universe, scoring, algebra, nb_features, arrow)
+            relation, label_universe, scoring, algebra,
+            nb_features, None, arrow)
 
         # compute expected value of corresponding relation
         expected_result = reduce(
@@ -257,7 +259,8 @@ class TestRelationCache:
         """
         # create cache with one composite arrow
         cache = TestRelationCache.get_cache(
-            relation, label_universe, scoring, algebra, nb_features, arrow)
+            relation, label_universe, scoring, algebra, nb_features, None,
+            arrow)
 
         # collect minimum of all total scores of parts of arrow
         # note that actual score of arrow is also taken in the loop
@@ -296,7 +299,8 @@ class TestRelationCache:
         # create cache with one composite arrow
         cache = TestRelationCache.get_cache(
             relation, label_universe,
-            scoring, algebra, nb_features, arrow)
+            scoring, algebra, nb_features, None,
+            arrow)
 
         # create label graph
         labels = get_labels(arrow, nb_scores, nb_labels)
@@ -379,7 +383,8 @@ class TestRelationCache:
         # create cache with one composite arrow
         cache = TestRelationCache.get_cache(
             relation, label_universe,
-            scoring, algebra, nb_features, arrow)
+            scoring, algebra, nb_features, None,
+            arrow)
 
         # target number of relations to keep
         nb_to_keep = (
@@ -415,23 +420,27 @@ class TestRelationCache:
             return torch.ones(1)
 
         singleton_universe = {
-            i: torch.full((1,), 1./max_arrow_length) for i in range(nb_labels)}
+            i: torch.ones(1) for i in range(nb_labels)}
 
         def scoring(src: Tsor, dst: Tsor, rel: Tsor):
+
             return rel
 
-        scores_algebra = VectAlgebra(1)
+        scores_algebra = VectMultAlgebra(1)
+
+        nb_points = len(arrow) + 1
+        datas = {i: torch.tensor([i]) for i in range(nb_points)}
 
         complete_cache = TestRelationCache.get_cache(
             relation, singleton_universe,
             scoring, scores_algebra, 1,
-            arrow,
+            datas, arrow
         )
 
         cache = TestRelationCache.get_cache(
             relation, singleton_universe,
-            scoring, scores_algebra, 1,
-            *(arrow[idx:idx + 1] for idx in range(len(arrow))),
+            scoring, scores_algebra, 1, datas,
+            *(arrow[idx:idx + 1] for idx in range(nb_points)),
         )
 
         cache.build_composites(max_arrow_number=max_arrow_number)
