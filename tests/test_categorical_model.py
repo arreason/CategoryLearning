@@ -416,7 +416,7 @@ class TestRelationCache:
             Test composite building.
         """
 
-        def relation(src: Tsor, dst: Tsor, rel: int) -> Tsor:
+        def relation(_: Tsor, __: Tsor, ___: int) -> Tsor:
             return torch.ones(1)
 
         singleton_universe = {
@@ -428,7 +428,8 @@ class TestRelationCache:
         scores_algebra = VectMultAlgebra(1)
 
         nb_points = len(arrow) + 1
-        datas = {i: torch.tensor([i]) for i in range(nb_points)}
+        datas = {
+            i: torch.full((1,), i, dtype=torch.float) for i in range(nb_points)}
 
         complete_cache = TestRelationCache.get_cache(
             relation, singleton_universe,
