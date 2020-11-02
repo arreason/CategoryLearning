@@ -440,7 +440,7 @@ class TestRelationCache:
         cache = TestRelationCache.get_cache(
             relation, singleton_universe,
             scoring, scores_algebra, 1, datas,
-            *(arrow[idx:idx + 1] for idx in range(nb_points)),
+            *(arrow[idx:idx + 1] for idx in range(nb_points - 1)),
         )
 
         cache.build_composites(max_arrow_number=max_arrow_number)
