@@ -103,7 +103,7 @@ class CompositeArrow(Generic[NodeType, ArrowType], abc.Sequence):  # pylint: dis
             if index.step:
                 return self.nodes[index]
 
-            # compute start and stop of nodes slice select nodes
+            # compute start and stop of nodes slice
             length = len(self)
             if index.start is None:
                 start = 0
