@@ -101,4 +101,3 @@ pylint_check "tests/" 2#000011 "no-self-use,duplicate-code"
 
 # Execute unit tests
 py.test -sv --exitfirst --durations=15 --cov=catlearn/ --no-cov-on-fail
-

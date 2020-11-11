@@ -344,7 +344,6 @@ class CompositionGraph(Generic[NodeType, ArrowType, AlgebraType], abc.Mapping): 
                 self.arrows(node, None, arrow_length_range=arrow_length_range)
                 for node in self.graph.nodes
             ))
-
         return iter(())
 
     def __iter__(self) -> Iterator[CompositeArrow[NodeType, ArrowType]]:

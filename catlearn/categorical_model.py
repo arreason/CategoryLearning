@@ -6,6 +6,7 @@ for the categorical model
 from __future__ import annotations
 from itertools import chain
 from types import MappingProxyType
+
 from typing import Any, Callable, IO, Iterable, Mapping, Tuple, Union, Optional
 
 import torch
