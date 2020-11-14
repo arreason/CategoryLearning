@@ -9,12 +9,14 @@ from typing import (
     Iterable, FrozenSet, Sequence, TypeVar, Generic,
     Optional, Callable, Tuple, Iterator, Type, Any, Mapping)
 from itertools import chain, product
+import warnings
 from collections import abc
 import random
 import pickle
 
 import numpy as np
 from networkx import DiGraph, NetworkXError, pagerank, hits
+from catlearn.utils import str_color
 
 NodeType = TypeVar("NodeType")
 ArrowType = TypeVar("ArrowType")
@@ -35,7 +37,8 @@ class DirectedGraph(Generic[NodeType], DiGraph, abc.MutableMapping):  # pylint: 
     A class to encapsulate directed graphs. Can be initialized from a dictionary:
     Values are iterable which must range over keys of the dictionary.
     For a key k,  v in self[k] means there is a vertex k -> v.
-    Complete list of available input formats: https://networkx.github.io/documentation/stable/reference/classes/digraph.html
+    Complete list of available input formats:
+    https://networkx.github.io/documentation/stable/reference/classes/digraph.html
     Different graph composition functions are provided in order to facilitate
     the generation of examples.
     """
@@ -609,7 +612,7 @@ def sample(
     - ranking: probability distribution over the input graph vertices
     - rng: Random generator
     - with_edges: Ensure that every returned vertex has an edge
-    NOTE: if sample_vertices_size is odd and with_edges=True, 
+    NOTE: if sample_vertices_size is odd and with_edges=True,
     number of returned edges will be sample_vertices_size-1
     NOTE: warning print to be replaced with appropriate logging
 
@@ -623,9 +626,10 @@ def sample(
         ranks = list(ranking(graph.edges).items())
         # Check if sample_vertices_size is odd
         if sample_vertices_size & 1:
-            print(f'sample_vertices_size {sample_vertices_size} is odd '
-            f'and will be rounded to floor even number {sample_vertices_size-1}'
+            warning_str = (f'sample_vertices_size {sample_vertices_size} is odd '
+            f'and will be rounded to floor even number {sample_vertices_size - 1}'
             'when with_edges=True')
+            warnings.warn(str_color('W', warning_str), UserWarning)
         sample_vertices_size //= 2
 
     # NOTE: all vertices are returned every call. Not optimal. Can be kept in memory
@@ -729,7 +733,7 @@ def random_walk_edge_sample(
     """
     if len(graph.edges) == 0:
         return DirectedGraph()
-    elif seeds is None:
+    if seeds is None:
         sampled_edges = list(rng.choices(list(graph.edges), k=n_seeds))
     else:
         sampled_edges = list(seeds)
@@ -778,7 +782,7 @@ def n_hop_sample(
     """
     if len(graph) == 0 or n_hops <= 0:
         return DiGraph()
-    elif seeds is None:
+    if seeds is None:
         if rng is None:
             rng = random.Random()
         sampled_vertices = set(rng.choices(list(graph), k=n_seeds))

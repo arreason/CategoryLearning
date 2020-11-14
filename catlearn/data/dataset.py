@@ -157,9 +157,11 @@ class Dataset():
         if self.node2vec_path:
             with open(self.node2vec_path, 'rb') as f:
                 node2vec_dict = pickle.load(f)
-            self.entity_id2vec = {k: Tsor(node2vec_dict[self.id2entity[k]]) for k in self.id2entity.keys()}
+            self.entity_id2vec = {k: Tsor(node2vec_dict[self.id2entity[k]])
+                for k in self.id2entity.keys()}
         else:
-            self.entity_id2vec = {k: torch.rand(self.entity_vec_dim) for k in self.id2entity.keys()}
+            self.entity_id2vec = {k: torch.rand(self.entity_vec_dim)
+                for k in self.id2entity.keys()}
 
     def init_relation_vectors(self):
         """one-hot representation of entities

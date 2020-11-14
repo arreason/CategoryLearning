@@ -1,39 +1,20 @@
+"""Data utils module contains functions to read and process training data"""
 from typing import Dict, List, Set, Union, Any
 import os
-import warnings
-import argparse
-import logging
-from tqdm import tqdm
 import pickle as pkl
+import argparse
+import warnings
+import logging
+import sys
 import torch
-import word2vec
-from .config import (raw_dataset_pat, preproc_pat)
 import numpy as np
+from tqdm import tqdm
+import word2vec
+from catlearn.data.config import (raw_dataset_pat, preproc_pat)
+from catlearn.utils import (init_logger, str_color)
+sys.path.append('../catlearn')
 
-LOGGING_FILE = 'data_utils_debug.log'
-if os.path.exists(os.path.join(os.getcwd(), LOGGING_FILE)):
-    os.remove(os.path.join(os.getcwd(), LOGGING_FILE))
-logging.basicConfig(format='%(asctime)s %(message)s', filename=LOGGING_FILE, level=logging.DEBUG)
-logging.debug('\nStart logging at data.utils on dataset debug level.')
-
-
-RESET_SEQ = "\033[0m"
-COLOR_SEQ = "\033[1;%dm"
-BOLD_SEQ = "\033[1m"
-BLACK, RED, GREEN, YELLOW, BLUE, MAGENTA, CYAN, WHITE = range(8)
-COLORS = {
-    'WARNING': YELLOW,
-    'INFO': WHITE,
-    'DEBUG': BLUE,
-    'CRITICAL': YELLOW,
-    'ERROR': RED
-}
-
-def str_color(color_type: str, string: str) -> str:
-    if color_type == 'W':
-        return COLOR_SEQ % (30 + COLORS['WARNING']) + string + RESET_SEQ
-    warnings.warn('Unknown color is specified in str_color(). Raw string returned.', UserWarning)
-    return string
+init_logger()
 
 def read_file(path: str) -> List[str]:
     """Safe reading of file, split it by lines and return in a List"""
@@ -43,12 +24,13 @@ def read_file(path: str) -> List[str]:
         lines2list = f.read().splitlines()
     return lines2list
 
+
 def write_file(path: str, to_file: Union[Dict, Set]):
     """Writes dictionary to a file
 
     Args:
         path (str): complete path to where a file will be stored.
-        to_file (Dict or Set): data structure to be stored in a file. 
+        to_file (Dict or Set): data structure to be stored in a file.
     """
     with open(path, 'w') as f:
         if isinstance(to_file, dict):
@@ -60,16 +42,18 @@ def write_file(path: str, to_file: Union[Dict, Set]):
         else:
             raise ValueError('Unsupported datatype for writing to a file.')
 
+
 def get_entities_relations(ds_list: List[str]) -> [List[str], List[str]]:
     """Get all entities and relations as 2 separate lists.
         Used to generate sets of unique values.
     """
     triplets = [line.split(raw_dataset_pat['sep']) for line in ds_list]
-    
+
     return [item.strip() for [h, _, t] in triplets for item in [h, t]], \
             [r.strip() for _, r, _ in triplets]
 
-def _update_set_with_with_missing(entities_or_rels: [List[str], List[str]],
+
+def _update_set_with_missing(entities_or_rels: [List[str], List[str]],
                                     set_to_update: Set,
                                     set_type: str='Entity',
                                     set_purpose: str='validation'):
@@ -80,6 +64,7 @@ def _update_set_with_with_missing(entities_or_rels: [List[str], List[str]],
             warnings.warn(str_color('W', warning_str), UserWarning)
             logging.warning(warning_str)
             set_to_update.add(er)
+
 
 def preprocess(path: str):
     """Preprocesses dataset stored in a text format <h\tr\tt\n> with N lines
@@ -99,22 +84,22 @@ def preprocess(path: str):
     # Check validation set on entities and relations not present in the training set
     valid: List[str] = read_file(os.path.join(path, raw_dataset_pat['valid']))
     entities_rels = get_entities_relations(valid)
-    _update_set_with_with_missing(entities_rels[0],
+    _update_set_with_missing(entities_rels[0],
                                     entities_set,
                                     set_type='Entity',
                                     set_purpose='validation')
-    _update_set_with_with_missing(entities_rels[1],
+    _update_set_with_missing(entities_rels[1],
                                     relations_set,
                                     set_type='Relations',
                                     set_purpose='validation')
     # Check testing set on entities and relations not present in the training set
     test: List[str] = read_file(os.path.join(path, raw_dataset_pat['test']))
     entities_rels = get_entities_relations(test)
-    _update_set_with_with_missing(entities_rels[0],
+    _update_set_with_missing(entities_rels[0],
                                     relations_set,
                                     set_type='Entity',
                                     set_purpose='test')
-    _update_set_with_with_missing(entities_rels[1],
+    _update_set_with_missing(entities_rels[1],
                                     relations_set,
                                     set_type='Relations',
                                     set_purpose='test')
@@ -158,20 +143,34 @@ def preprocess_word2vec(path_word2vec: str, path_dir_wordset: str):
 
 
 def parse_args():
+    """Parse arguments
+
+    Returns:
+        ArgumentParser: object
+    """
     parser = argparse.ArgumentParser(description='Process arguments.')
     parser.add_argument('--ds_name', help='Specify dataset name one of: wn18, fb15.',
                         type=str)
     parser.add_argument('--path', help=('Path to a folder where raw dataset files are stored.'
         ' For raw files naming format check config.py.'),
-                        type=str, default='./')
+                        type=str, default='')
     parser.add_argument('--w2v_path', help=('Preprocess word2vec dataset. Path to word2vec.txt'
         ' model file. Possible only after a dataset was preprocessed.'),
                         type=str, default=None)
-    return parser.parse_args()
+    return parser
+
 
 if __name__ == '__main__':
     arg_parser = parse_args()
-    if arg_parser.path and arg_parser.ds_name in ['wn18', 'fb15']:
-        preprocess(arg_parser.path)
-    if arg_parser.path and arg_parser.w2v_path:
-        preprocess_word2vec(arg_parser.w2v_path, arg_parser.path)
+    try:
+        args = arg_parser.parse_args()
+    except ValueError:
+        arg_parser.print_help()
+        sys.exit()
+    if os.path.isdir(args.path):
+        if args.ds_name in ['wn18', 'fb15']:
+            preprocess(args.path)
+        if args.w2v_path:
+            preprocess_word2vec(args.w2v_path, args.path)
+    else:
+        arg_parser.print_help()

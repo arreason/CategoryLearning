@@ -27,6 +27,7 @@ MANIFEST
 
 # IDE settings
 .VSCodeCounter/
+.vscode
 
 # Debug
 debug/
