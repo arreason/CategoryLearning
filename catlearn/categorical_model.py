@@ -290,6 +290,8 @@ class TrainableDecisionCatModel(DecisionCatModel):
                 RelationCache[NodeType, ArrowType], DirectedGraph[NodeType]]:
         """
         perform one training step on a batch of tuples
+        NOTE: needs more detailed docstring. Describe requirements and best practices 
+        for each variable used during the training 
         """
         # backprop on the batch
         cost, cache, matched = self.cost(

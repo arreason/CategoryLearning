@@ -262,6 +262,7 @@ class CompositionGraph(Generic[NodeType, ArrowType, AlgebraType], abc.Mapping): 
     def add(self, arrow: CompositeArrow[NodeType, ArrowType]) -> None:
         """
         Add the given composite arrow to the composition graph
+        NOTE: manage empty arrows
         """
         if not arrow:
             raise ValueError("Can only add arrows of length at least 1")
