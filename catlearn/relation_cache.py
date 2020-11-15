@@ -1,7 +1,7 @@
 from types import MappingProxyType
 from typing import (
     Mapping, Callable, Iterable, Generic,
-    Tuple, Iterator, Hashable, Optional, List)
+    Tuple, Iterator, Hashable, Optional, FrozenSet)
 from collections import abc, defaultdict
 from math import inf
 
@@ -98,7 +98,7 @@ class RelationCache(
                 arrow: CompositeArrow[NodeType, ArrowType]
             ) -> Tuple[Tsor, Tsor]:
             """
-            compute value associated to given arrow, knowing using values
+            compute value associated to given arrow, using values
             of its subparts
             """
             # case of length 1
@@ -150,6 +150,7 @@ class RelationCache(
             comp: BinaryOp,
             datas: Mapping[NodeType, Tsor],
             arrows: Iterable[CompositeArrow[NodeType, ArrowType]],
+            max_arrow_number: Optional[int] = None,
             epsilon: float = DEFAULT_EPSILON) -> None:
         """
         Initialize a new cache of relations, from:
@@ -161,6 +162,12 @@ class RelationCache(
                and 1 relation value,
            comp: a composition operation returning a relation value from
                2 relation values (supposed associative)
+           datas: a dictionary containing the value of each node
+           arrows: a list of arrows to add to the underlying graph
+           max_arrow_number: if None, does nothing. If strictly positive,
+               the cache will attempt to build further composites of the
+               given arrows, until max_arrow_number of arrows is reached
+           epsilon: precision for numerical computations
         """
         self.epsilon = epsilon
         # base assumption: all arrows node supports should be in
@@ -188,12 +195,37 @@ class RelationCache(
         # register wraping attributes
         self.add = self._graph.add
         self.graph = self._graph.graph
-        self.arrows = self._graph.arrows
 
         # fill the cache with provided arrows
         for arrow in arrows:
             self.add(arrow)
 
+        # build composites if max_arrow_number is provided
+        if max_arrow_number and max_arrow_number > 0:
+            self.build_composites(max_arrow_number=max_arrow_number)
+
+    def arrows(
+            self, src: Optional[NodeType] = None,
+            tar: Optional[NodeType] = None,
+            arrow_length_range: Tuple[int, Optional[int]] = (0, None),
+            include_non_causal: bool = True,
+    ) -> Iterator[CompositeArrow[NodeType, ArrowType]]:
+        """
+        Get an iterator over all arrows starting at src and ending at tar.
+        If source or tar is None, will loop through all possible sources
+        and arrows.
+        If no existing arrows (or src/tar not in the underlying graph),
+        returns an empty iterator.
+        An arrow length range can also be specified. In this case,
+        only arrows with a length in the specified range are returned.
+        If include_non_causal is set to True, includes arrows which
+        have a score of 0. Otherwise they are ignored.
+        """
+        arrows = self._graph.arrows(
+            src=src, tar=tar, arrow_length_range=arrow_length_range)
+        return (
+            arr for arr in arrows
+            if include_non_causal or self[arr].sum() > 0)
 
     @property
     def causality_cost(self):
@@ -283,6 +315,109 @@ class RelationCache(
         self._causality_cost = torch.zeros(())
         self._nb_compositions = 0
 
+    def _get_worst_relation(self) -> Optional[
+            CompositeArrow[NodeType, ArrowType]]:
+        """
+            Identify the relation with the lowest score in the cache.
+            Only looks at 1st order arrows. Arrows which are removed are those
+            with the lowest score relative to other arrows.
+            If all relations have no alternatives and thus cannot be
+            removed, return None.
+        """
+        # create a dictionary of total scores of each arrow
+        scores = {
+            arrow: torch.log(torch.sum(self[arrow]))
+            for arrow in self.arrows()}
+
+        # compute marginal utility of each arrow
+        utility = defaultdict(lambda: 0.)
+        for arrow in self.arrows():
+            src = arrow[0]
+            tar = arrow[-1]
+            other_scores = (
+                scores[arr] for arr in self.arrows(src, tar)
+                if arr is not arrow)
+
+            arrow_utility = max(
+                scores[arrow] - max(other_scores, default=-inf), 0.)
+            for idx in range(len(arrow)):
+                utility[arrow[idx:(idx + 1)]] += arrow_utility
+
+        # identify worst relation
+        candidate_arrows = (arr for arr, val in utility.items() if val < inf)
+        to_remove = min(
+            candidate_arrows, key=lambda arr: utility[arr], default=None)
+        return to_remove
+
+    def prune_relations(
+        self, nb_to_keep: int) -> FrozenSet[
+            CompositeArrow[NodeType, ArrowType]]:
+        """
+            Remove relations with a low score in the cache, and keep only
+            nb_to_keep relations of each order.
+            Only remove 1st order arrows. Arrows which are removed are those
+            with the lowest score relative to other arrows.
+
+            Returns the list of pruned relations
+        """
+        pruned = set()
+        while True:
+            relation = (
+                None if len(self) <= nb_to_keep
+                else self._get_worst_relation())
+            if relation is None:
+                return frozenset(pruned)
+            del self[relation]
+            pruned.add(relation)
+
+    def build_composites(
+        self, max_arrow_number,
+    ) -> Tuple[
+        FrozenSet[CompositeArrow[NodeType, ArrowType]],
+        FrozenSet[CompositeArrow[NodeType, ArrowType]]]:
+        """
+        Build composites at each order, until max_arrow_number is reached
+        """
+        content_before_update = set(self)
+        max_order_before_update = max(len(arr) for arr in self)
+
+        order = 1
+        while True:
+
+            added_arrows = set()
+            # loop through length n arrows and try to extend them by 1 node
+            for arr in self.arrows(
+                arrow_length_range=(order, order + 1), include_non_causal=False,
+            ):
+                for extension in self.arrows(
+                    src=arr[-1], arrow_length_range=(1, 2)):
+                    arr_candidate = arr + extension
+
+                    # verify that candidate arrow's end is causal
+                    if (arr_candidate not in self and self.get(
+                            arr_candidate[1:],
+                            default=torch.zeros(0)).sum() > 0):
+                        self.add(arr_candidate)
+                        added_arrows.add(arr_candidate)
+
+            # drop arrows above the limit
+            removed_arrows = self.prune_relations(max_arrow_number)
+
+            # if we've not looked at all arrows already in the cache
+            # continue
+            # otherwise stop as soon as nothing new comes up
+            if not (order <= max_order_before_update or any(
+                    self[arr].sum() > 0
+                    for arr in added_arrows - removed_arrows)):
+                break
+
+            order += 1
+
+        content_after_update = set(self)
+        return (
+            frozenset(content_after_update - content_before_update),
+            frozenset(content_before_update - content_after_update))
+
     def match(
             self, labels: DirectedGraph[NodeType],
             match_negatives: bool = True) -> Tsor:
@@ -356,57 +491,3 @@ class RelationCache(
                 result_graph[src][tar].pop(NegativeMatch(best_match), None)
 
         return result_graph
-
-    def _get_worst_relation(self) -> Optional[
-            CompositeArrow[NodeType, ArrowType]]:
-        """
-            Identify the relation with the lowest score in the cache.
-            Only looks at 1st order arrows. Arrows which are removed are those
-            with the lowest score relative to other arrows.
-            If all relations have no alternatives and thus cannot be
-            removed, return None.
-        """
-        # create a dictionary of total scores of each arrow
-        scores = {
-            arrow: torch.log(torch.sum(self[arrow]))
-            for arrow in self.arrows()}
-
-        # compute marginal utility of each arrow
-        utility = defaultdict(lambda: 0.)
-        for arrow in self.arrows():
-            src = arrow[0]
-            tar = arrow[-1]
-            other_scores = (
-                scores[arr] for arr in self.arrows(src, tar)
-                if arr is not arrow)
-
-            arrow_utility = max(
-                scores[arrow] - max(other_scores, default=-inf), 0.)
-            for idx in range(len(arrow)):
-                utility[arrow[idx:(idx + 1)]] += arrow_utility
-
-        # identify worst relation
-        candidate_arrows = (arr for arr, val in utility.items() if val < inf)
-        to_remove = min(
-            candidate_arrows, key=lambda arr: utility[arr], default=None)
-        return to_remove
-
-    def prune_relations(
-        self, nb_to_keep: int) -> List[CompositeArrow[NodeType, ArrowType]]:
-        """
-            Remove relations with a low score in the cache, and keep only
-            nb_to_keep relations of each order.
-            Only remove 1st order arrows. Arrows which are removed are those
-            with the lowest score relative to other arrows.
-
-            Returns the list of pruned relations
-        """
-        pruned = []
-        while True:
-            relation = (
-                None if len(self) <= nb_to_keep
-                else self._get_worst_relation())
-            if relation is None:
-                return pruned
-            del self[relation]
-            pruned.append(relation)
