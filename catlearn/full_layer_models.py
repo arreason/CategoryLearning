@@ -12,10 +12,10 @@ from typing import Any, Callable, Sequence, Tuple, Iterable, Union, IO
 import torch
 import torch.nn as nn
 
-from catlearn.tensor_utils import Tsor
+from catlearn.tensor_utils import Tsor, AbstractModel
 
 
-class ConstantModel(nn.Module):
+class ConstantModel(nn.Module, AbstractModel):
     """ Encapsulate a non-parametrized transform """
 
     def __init__(self, func: Callable, name: str = 'ConstantModel') -> None:
@@ -36,6 +36,17 @@ class ConstantModel(nn.Module):
         """ Forward override """
         assert len(inputs) == 1
         return self._forward(inputs[0])
+
+    def named_parameters(
+        self, recurse: bool = True,
+    ) -> Iterable[Tuple[str, Tsor]]:
+        return iter(())
+
+    def freeze(self) -> Tsor:
+        pass
+
+    def unfreeze(self) -> Tsor:
+        pass
 
 
 class LayeredModel(nn.Module):
@@ -109,12 +120,12 @@ class LayeredModel(nn.Module):
         """
         return lambda: self.layers.children()
 
-    @property
-    def parameters(self) -> Callable[[], Iterable[Any]]:
+    def named_parameters(
+        self, recurse: bool = True) -> Callable[[], Iterable[Tsor]]:
         """ Function to gather all parameters of the model: go through layer and
         check if each layer has an attribute "parameters"
         """
-        return lambda: self.layers.parameters()
+        return self.layers.named_parameters(recurse=recurse)
 
     def forward(self, *inputs: Tsor) -> Tsor:
         """ Forward pass of Layered Model """

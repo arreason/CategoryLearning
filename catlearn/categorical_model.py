@@ -13,7 +13,7 @@ import torch
 from torch.optim import Optimizer
 
 from catlearn.tensor_utils import (
-    DEFAULT_EPSILON, Tsor, remap_subproba)
+    DEFAULT_EPSILON, Tsor, remap_subproba, AbstractModel)
 from catlearn.graph_utils import DirectedGraph, NodeType
 from catlearn.composition_graph import CompositeArrow, ArrowType
 from catlearn.relation_cache import RelationCache
@@ -23,18 +23,6 @@ from catlearn.algebra_models import Algebra
 # Abstract type definitions
 # NB: docstring temporarily disabled
 # pylint: disable=missing-docstring
-class AbstractModel:
-    @property
-    def parameters(self) -> Callable[[], Iterable[Any]]:
-        raise NotImplementedError()
-
-    def freeze(self) -> None:
-        raise NotImplementedError()
-
-    def unfreeze(self) -> None:
-        raise NotImplementedError()
-
-
 class RelationModel(AbstractModel):
     def __call__(self,
                  src: Tsor,
@@ -48,6 +36,7 @@ class ScoringModel(AbstractModel):
                  dst: Tsor,
                  rel: Tsor) -> Tsor:
         raise NotImplementedError()
+
 
 # pylint: enable=missing-docstring
 
@@ -189,7 +178,7 @@ class DecisionCatModel:
 
 
 
-class TrainableDecisionCatModel(DecisionCatModel):
+class TrainableDecisionCatModel(DecisionCatModel, AbstractModel):
     """
     Specialization of DecisionCatModel working with trainable
     torch modules.
@@ -243,13 +232,20 @@ class TrainableDecisionCatModel(DecisionCatModel):
         """
         return self.algebra.flatdim
 
-    @property
-    def parameters(self) -> Callable[[], Iterable[Any]]:
+    def named_parameters(self, recurse: bool=True) -> Iterable[str, Tsor]:
         """
         returns an iterator over parameters of the model
         """
-        return lambda: chain(self._relation_model.parameters(),
-                             self._scoring_model.parameters())
+        relation_params = (
+            ('relation_' + name, param)
+            for (name, param)
+            in self._relation_model.named_parameters(recurse=recurse))
+        score_params = (
+            ('scoring_' + name, param)
+            for (name, param)
+            in self._scoring_model.named_parameters(recurse=recurse))
+
+        return chain(relation_params, score_params)
 
     def freeze(self) -> None:
         """

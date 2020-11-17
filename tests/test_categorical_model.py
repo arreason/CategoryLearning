@@ -84,8 +84,8 @@ class CustomRelation(RelationModel):
         self.linear = nn.Linear(2 * nb_features + nb_labels, algebra.flatdim)
 
     @property
-    def parameters(self) -> Callable[[], Iterable[Any]]:
-        return self.linear.parameters
+    def named_parameters(self) -> Callable[[], Iterable[Tsor]]:
+        return self.linear.named_parameters
 
     def __call__(self, x: Tsor, y: Tsor, l: Tsor) -> Tsor:
         """ Compute x R y """
@@ -118,8 +118,8 @@ class CustomScore(ScoringModel):
         self.softmax = torch.nn.Softmax(dim=-1)
 
     @property
-    def parameters(self) -> Callable[[], Iterable[Any]]:
-        return self.linear.parameters
+    def named_parameters(self) -> Callable[[], Iterable[Tsor]]:
+        return self.linear.named_parameters
 
     def __call__(self, src: Tsor, dst: Tsor, rel: Tsor) -> Tsor:
         """ Compute S(src, dst, rel) """
