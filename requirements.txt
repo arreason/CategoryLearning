@@ -13,8 +13,18 @@ torchvision
 # Additional
 ipython
 jupyter
+jupyterlab
 pandas
 plotly
 pyyaml
 tqdm
 testfixtures
+matplotlib
+tqdm
+word2vec
+graphistry
+<<<<<<< HEAD
+wandb
+seaborn
+=======
+>>>>>>> 302ddcf... updated analisys script

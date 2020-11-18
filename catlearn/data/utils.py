@@ -25,13 +25,18 @@ def read_file(path: str) -> List[str]:
     return lines2list
 
 
-def write_file(path: str, to_file: Union[Dict, Set]):
+def write_file(path: str, to_file: Union[Dict, Set, List], force: bool=False):
     """Writes dictionary to a file
 
     Args:
         path (str): complete path to where a file will be stored.
         to_file (Dict or Set): data structure to be stored in a file.
     """
+    if os.path.isfile(path) and not force:
+        warning_str = (f'File ${path} already exists.'
+            f' Set force=True to overwrite. Exiting...')
+        warnings.warn(str_color('W', warning_str), UserWarning)
+        return
     with open(path, 'w') as f:
         if isinstance(to_file, dict):
             for k, v in to_file.items():
@@ -39,6 +44,12 @@ def write_file(path: str, to_file: Union[Dict, Set]):
         elif isinstance(to_file, set):
             for v in to_file:
                 f.write(str(v) + '\n')
+        elif (isinstance(to_file, list)
+                and len(to_file)
+                and all(type(v) in [int, float, str] for v in to_file)
+        ):
+            for v in to_file:
+                f.write(str(v) + '\n') 
         else:
             raise ValueError('Unsupported datatype for writing to a file.')
 
