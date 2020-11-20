@@ -23,8 +23,8 @@ matplotlib
 tqdm
 word2vec
 graphistry
-<<<<<<< HEAD
 wandb
+<<<<<<< HEAD
 seaborn
 =======
->>>>>>> 302ddcf... updated analisys script
+>>>>>>> 577da1a... catlearn-11 updated requirements for wandb
