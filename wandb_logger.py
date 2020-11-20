@@ -7,6 +7,7 @@ from collections import defaultdict
 from itertools import chain
 import wandb
 
+from catlearn.tensor_utils import Tsor
 from catlearn.composition_graph import NodeType, ArrowType, DirectedGraph
 from catlearn.relation_cache import RelationCache
 from catlearn.categorical_model import TrainableDecisionCatModel
@@ -55,4 +56,15 @@ def log_results(
         'cost_per_label': cost_per_label,
         'arrow_numbers': arrows,
         **info_to_log
+    })
+
+def save_params(
+    model: TrainableDecisionCatModel
+):
+    """
+    Save relation and scoring model parameters
+    for a trainable decision cat model
+    """
+    wandb.log({
+        "params": [Tsor(param) for param in model.parameters()]
     })
