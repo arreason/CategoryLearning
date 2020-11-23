@@ -231,7 +231,7 @@ class TrainableDecisionCatModel(DecisionCatModel, AbstractModel):
         """
         return self.algebra.flatdim
 
-    def named_parameters(self, recurse: bool=True) -> Iterable[str, Any]:
+    def named_parameters(self, recurse: bool=True) -> Iterable[str, Tsor]:
         """
         returns an iterator over parameters of the model
         """

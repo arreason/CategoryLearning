@@ -121,7 +121,7 @@ class LayeredModel(nn.Module):
         return lambda: self.layers.children()
 
     def named_parameters(
-        self, recurse: bool = True) -> Callable[[], Iterable[Any]]:
+        self, recurse: bool = True) -> Callable[[], Iterable[Tsor]]:
         """ Function to gather all parameters of the model: go through layer and
         check if each layer has an attribute "parameters"
         """
