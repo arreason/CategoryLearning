@@ -241,7 +241,7 @@ def remap_subproba(
 # NB: docstring temporarily disabled
 # pylint: disable=missing-docstring
 class AbstractModel:
-    def parameters(self, recurse: bool = True) -> Callable[[], Iterable[Tsor]]:
+    def parameters(self, recurse: bool = True) -> Iterable[Tsor]:
         return (param for (_, param) in self.named_parameters(recurse=recurse))
 
     def named_parameters(
