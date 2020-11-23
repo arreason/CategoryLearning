@@ -241,10 +241,12 @@ def remap_subproba(
 # NB: docstring temporarily disabled
 # pylint: disable=missing-docstring
 class AbstractModel:
-    def parameters(self) -> Callable[[], Iterable[Any]]:
-        return (param for (_, param) in self.named_parameters())
+    def parameters(self, recurse: bool = True) -> Callable[[], Iterable[Any]]:
+        return (param for (_, param) in self.named_parameters(recurse=recurse))
 
-    def named_parameters(self) -> Iterable[Tuple[str, Any]]:
+    def named_parameters(
+        self, recurse: bool = True
+    ) -> Iterable[Tuple[str, Any]]:
         raise NotImplementedError()
 
     def freeze(self) -> None:

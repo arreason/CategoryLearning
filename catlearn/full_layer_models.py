@@ -37,7 +37,9 @@ class ConstantModel(nn.Module, AbstractModel):
         assert len(inputs) == 1
         return self._forward(inputs[0])
 
-    def named_parameters(self) -> Iterable[Tuple[str, Any]]:
+    def named_parameters(
+        self, recurse: bool = True,
+    ) -> Iterable[Tuple[str, Tsor]]:
         return iter(())
 
     def freeze(self) -> Tsor:
@@ -118,12 +120,12 @@ class LayeredModel(nn.Module):
         """
         return lambda: self.layers.children()
 
-    @property
-    def named_parameters(self) -> Callable[[], Iterable[Any]]:
+    def named_parameters(
+        self, recurse: bool = True) -> Callable[[], Iterable[Any]]:
         """ Function to gather all parameters of the model: go through layer and
         check if each layer has an attribute "parameters"
         """
-        return lambda: self.layers.named_parameters()
+        return self.layers.named_parameters(recurse=recurse)
 
     def forward(self, *inputs: Tsor) -> Tsor:
         """ Forward pass of Layered Model """

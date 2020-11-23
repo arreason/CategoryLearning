@@ -231,12 +231,20 @@ class TrainableDecisionCatModel(DecisionCatModel, AbstractModel):
         """
         return self.algebra.flatdim
 
-    def named_parameters(self) -> Iterable[str, Any]:
+    def named_parameters(self, recurse: bool=True) -> Iterable[str, Any]:
         """
         returns an iterator over parameters of the model
         """
-        return chain(self._relation_model.named_parameters(),
-            self._scoring_model.named_parameters())
+        relation_params = (
+            ('relation_' + name, param)
+            for (name, param)
+            in self._relation_model.named_parameters(recurse=recurse))
+        score_params = (
+            ('scoring_' + name, param)
+            for (name, param)
+            in self._scoring_model.named_parameters(recurse=recurse))
+
+        return chain(relation_params, score_params)
 
     def freeze(self) -> None:
         """
