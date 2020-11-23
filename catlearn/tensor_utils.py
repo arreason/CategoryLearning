@@ -8,7 +8,7 @@ Created on Wed May 30 20:53:39 2018
 various utilities for tensor manipulation
 """
 
-from typing import Optional, Sequence
+from typing import Optional, Sequence, Callable, Iterable, Tuple, Any
 import torch
 from torch import Tensor as Tsor
 from torch.nn.functional import kl_div
@@ -235,3 +235,20 @@ def remap_subproba(
         + compl_proba_sqrt)/reference_proba.sqrt()
 
     return (to_remap_sqrt + corr_factor * reference_sqrt) ** 2
+
+
+# Abstract type definitions
+# NB: docstring temporarily disabled
+# pylint: disable=missing-docstring
+class AbstractModel:
+    def parameters(self) -> Callable[[], Iterable[Any]]:
+        return (param for (_, param) in self.named_parameters())
+
+    def named_parameters(self) -> Iterable[Tuple[str, Any]]:
+        raise NotImplementedError()
+
+    def freeze(self) -> None:
+        raise NotImplementedError()
+
+    def unfreeze(self) -> None:
+        raise NotImplementedError()
