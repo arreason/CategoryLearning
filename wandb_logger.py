@@ -66,5 +66,6 @@ def save_params(
     for a trainable decision cat model
     """
     wandb.log({
-        "params": [Tsor(param) for param in model.parameters()]
+        "params": {
+            name: Tsor(param) for (name, param) in model.named_parameters()}
     })
