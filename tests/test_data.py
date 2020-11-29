@@ -37,10 +37,10 @@ class TestDataset:
                                                     b'_member_of_domain_region\t2\n'
                                                     b'_member_meronym\t3\n')
                                     },
-                expected_graph=DirectedGraph(((0, 1, {0: Tsor([1., 0, 0, 0])}),
-                                                (1, 2, {1: Tsor([0, 1., 0, 0])}),
-                                                (0, 3, {2: Tsor([0, 0, 1., 0])}),
-                                                (3, 2, {3 : Tsor([0, 0, 0, 1.])})
+                expected_graph=DirectedGraph(((0, 1, {0: None}),
+                                                (1, 2, {1: None}),
+                                                (0, 3, {2: None}),
+                                                (3, 2, {3 : None})
                                             ))
                 ),
         ]

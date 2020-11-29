@@ -112,9 +112,12 @@ class Dataset():
             return ((
                     self.entity2id[u.strip()],
                     self.entity2id[v.strip()],
-                    {self.relation2id[e.strip()]: self.relation_id2vec[self.relation2id[e.strip()]]}
+                    {self.relation2id[e.strip()]: None}
                 ) for u, e, v in raw_dataset)
         raise ValueError(f'Unknown dataset name ${self.ds_name}')
+
+        # def augment_dataset(self, opposites_dict:):
+            # """Check opposite labels always exist and update if it doesn't"""
 
     def _format_id_map(self, id_map: Generator, ds_name: str) -> Dict[str, int]:
         """Creates a dictionary from read mapping of relation or entity to ID."""

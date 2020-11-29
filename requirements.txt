@@ -24,11 +24,4 @@ tqdm
 word2vec
 graphistry
 wandb
-<<<<<<< HEAD
-<<<<<<< HEAD
 seaborn
-=======
->>>>>>> 577da1a... catlearn-11 updated requirements for wandb
-=======
-seaborn
->>>>>>> 3079716... catlearn-11 added more stats

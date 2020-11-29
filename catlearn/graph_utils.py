@@ -13,8 +13,10 @@ import warnings
 from collections import abc
 import random
 import pickle
+import torch
 
 import numpy as np
+import networkx as nx
 from networkx import DiGraph, NetworkXError, pagerank, hits
 from catlearn.utils import str_color
 
@@ -795,3 +797,95 @@ def n_hop_sample(
             visited_vertices.update(list(graph[v]))
         sampled_vertices |= visited_vertices
     return graph.subgraph(sampled_vertices)
+
+
+def clean_selfloops(
+    graph: DirectedGraph[NodeType],
+    clean_edges: bool=True,
+    clean_isolate_nodes: bool=True):
+    """Inspect and clean graph self-loops.
+    clean_edges=True will remove edges, but isolates nodes
+    would possibly be created.
+    It's recommended to keep clean_isolate_nodes=True
+    """
+    selfloop_edges = list(nx.selfloop_edges(graph))
+    print(f'\nFollowing {len(selfloop_edges)} selfloop edge(s) are found:\n{selfloop_edges}')
+    if clean_edges:
+        graph.remove_edges_from(selfloop_edges)
+        print(f'{len(selfloop_edges)} selfloop edges are removed.')
+    if clean_isolate_nodes:
+        clean_isolates(graph)
+
+
+def clean_isolates(
+    graph: DirectedGraph[NodeType],
+    clean: bool=True):
+    """Clean nodes with zero connections (either in- or outbound)."""
+    isolates = list(nx.isolates(graph))
+    print(f'Following {len(isolates)} isolate(s) are found:\n{isolates}')
+    graph.remove_nodes_from(list(nx.isolates(graph)))
+    if clean:
+        graph.remove_nodes_from(isolates)
+        print(f'{len(isolates)} isolates are removed.')
+
+
+def one_hot(sample_id: int, nb_samples: int) -> torch.tensor:
+    """create torch OH vector for an id position inside this tensor"""
+    enc_sample = torch.zeros(nb_samples)
+    enc_sample[sample_id] = 1.0
+    return enc_sample
+
+
+def init_relation_vectors(relation2id: dict) -> dict:
+    """one-hot representation of entities
+    equivalent to label_universe required by TrainableDecisionCatModel
+    TODO: Parametrize encoding type. OHE could be one of possible encoding schemes.
+    In current implementation, other encodings like embedding vectors are not considered.
+    """
+    nb_relations = len(relation2id)
+    return {i: one_hot(i, nb_relations) for i in relation2id.values()}
+
+
+def augment_graph(graph: DirectedGraph, revers_rels: dict):
+    """revers_rels: dict of corresponding opposite relations.
+    rels_revers format example: {1: 1, 2: 4, 3: 13, 4: None}
+    where 1, 2 are from the existing label universe
+    13 is created. None means there is not opposite.
+    If opposite relations are created, label_universe must be updated.
+    It's recommended to create revers_rels dictionary
+    with create_revers_rels method.
+    --------------
+    Only for Directional, not multirelational graphs (single relation per edge).
+    Edge data are created in the format {id: None}.
+    If there are custom edge data different from None,
+    another function must be created. 
+    """
+    for src, dst, rel in graph.edges(data=True):
+        rel_id = list(rel.keys())[0]
+        revers_id = revers_rels.get(rel_id)
+        if (revers_id and not graph.has_edge(dst, src)):
+            graph.add_edge(dst, src)
+            graph[dst][src].update({revers_id: None})
+
+
+def create_revers_rels(revers_rels_str: dict, relation2id: dict) -> list(dict, dict, dict):
+    """Create new relation2id and relation_id2vec dictionaries, as well as
+    revers_rels dictionary, that should be passed to augment_graph function.
+    """
+    relation2id_augmented = {}
+    relation_id2vec_augmented = {}
+    revers_rels = {}
+    offset = len(relation2id)
+    for rel, revers in revers_rels_str.items():
+        rel_id = relation2id[rel]
+        relation2id_augmented[rel] = rel_id
+        if not revers:
+            continue
+        if relation2id.get(revers):
+            revers_id = relation2id[revers]
+        else:
+            revers_id = rel_id + offset
+        revers_rels[rel_id] = revers_id
+        relation2id_augmented[revers] = revers_id
+    relation_id2vec_augmented = init_relation_vectors(relation2id_augmented)
+    return [relation2id_augmented, relation_id2vec_augmented, revers_rels]
