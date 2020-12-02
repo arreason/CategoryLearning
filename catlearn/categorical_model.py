@@ -3,7 +3,7 @@ This file introduces the factories for creating the necessary cost functions
 for the categorical model
 """
 
-from __future__ import annotations
+# from __future__ import annotations
 from itertools import chain
 from types import MappingProxyType
 
@@ -168,7 +168,7 @@ class DecisionCatModel:
         torch.save(self, flike)
 
     @staticmethod
-    def load(flike: Union[str, IO]) -> DecisionCatModel:
+    def load(flike: Union[str, IO]) -> 'DecisionCatModel':
         """
         Load a model from a given location (path or file-like object)
         """
@@ -232,7 +232,7 @@ class TrainableDecisionCatModel(DecisionCatModel, AbstractModel):
         """
         return self.algebra.flatdim
 
-    def named_parameters(self, recurse: bool=True) -> Iterable[str, Tsor]:
+    def named_parameters(self, recurse: bool=True) -> 'Iterable[str, Tsor]':
         """
         returns an iterator over parameters of the model
         """
@@ -313,7 +313,7 @@ class TrainableDecisionCatModel(DecisionCatModel, AbstractModel):
         torch.save(self, flike)
 
     @staticmethod
-    def load(flike: Union[str, IO]) -> TrainableDecisionCatModel:
+    def load(flike: Union[str, IO]) -> 'TrainableDecisionCatModel':
         """
         Load a model from a given location (path or file-like object)
         """

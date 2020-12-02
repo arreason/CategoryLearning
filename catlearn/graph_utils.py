@@ -4,7 +4,7 @@ Created on Wed Mar 13 13:47:33 2019
 @author: christophe_c
 A library for graph utilities used in our project.
 """
-from __future__ import annotations
+# from __future__ import annotations
 from typing import (
     Iterable, FrozenSet, Sequence, TypeVar, Generic,
     Optional, Callable, Tuple, Iterator, Type, Any, Mapping)
@@ -22,6 +22,7 @@ from catlearn.utils import str_color
 
 NodeType = TypeVar("NodeType")
 ArrowType = TypeVar("ArrowType")
+
 
 
 def mapping_product(mapping0: Mapping, mapping1: Mapping) -> Iterator:
@@ -70,13 +71,13 @@ class DirectedGraph(Generic[NodeType], DiGraph, abc.MutableMapping):  # pylint: 
                     self[node][child].update(labels)
 
     @property
-    def op(self) -> DirectedGraph[NodeType]:
+    def op(self) -> 'DirectedGraph[NodeType]':
         """
         returns the opposite graph
         """
         return self.reverse(copy=False)
 
-    def dualize_relations(self) -> DirectedGraph[NodeType]:
+    def dualize_relations(self) -> 'DirectedGraph[NodeType]':
         """
         returns the dually augmented graph
 
@@ -129,7 +130,7 @@ class DirectedGraph(Generic[NodeType], DiGraph, abc.MutableMapping):  # pylint: 
         """
         return self.op.under(root)
 
-    def subgraph_nodes(self, nodes: Iterable[NodeType]) -> DirectedGraph[NodeType]:
+    def subgraph_nodes(self, nodes: Iterable[NodeType]) -> 'DirectedGraph[NodeType]':
         """
         Extract a subgraph of current graph constituted of given nodes
         """
@@ -137,7 +138,7 @@ class DirectedGraph(Generic[NodeType], DiGraph, abc.MutableMapping):  # pylint: 
         return type(self)(
             {node: set(self[node]) & nodes_set for node in nodes_set})
 
-    def prune(self, node: NodeType) -> DirectedGraph[NodeType]:
+    def prune(self, node: NodeType) -> 'DirectedGraph[NodeType]':
         """
         Prune a node out of the graph, but making sure that for any subgraph
         i -> pruned_node -> j, there is a i -> j vertex added
@@ -169,8 +170,8 @@ class DirectedGraph(Generic[NodeType], DiGraph, abc.MutableMapping):  # pylint: 
             + ")")
 
     def __or__(
-            self, other_graph: DirectedGraph[NodeType]
-    ) -> DirectedGraph[Tuple[bool, NodeType]]:
+            self, other_graph: 'DirectedGraph[NodeType]'
+    ) -> 'DirectedGraph[Tuple[bool, NodeType]]':
         """
         Generates a new directed graph by making the disjoint sum
         of both graphs. Changes the nodes to:
@@ -188,8 +189,8 @@ class DirectedGraph(Generic[NodeType], DiGraph, abc.MutableMapping):  # pylint: 
         return type(self)({**remap_self, **remap_other})
 
     def __and__(
-            self, other_graph: DirectedGraph[NodeType]
-    ) -> DirectedGraph[Tuple[NodeType, NodeType]]:
+            self, other_graph: 'DirectedGraph[NodeType]'
+    ) -> 'DirectedGraph[Tuple[NodeType, NodeType]]':
         """
         Generates a new directed graph by making the cartesian product
         of both graphs, in the category theoretic sense of the term.
@@ -202,8 +203,8 @@ class DirectedGraph(Generic[NodeType], DiGraph, abc.MutableMapping):  # pylint: 
             in product(self.items(), other_graph.items())})
 
     def __add__(
-            self, other_graph: DirectedGraph[NodeType]
-    ) -> DirectedGraph[Tuple[bool, NodeType]]:
+            self, other_graph: 'DirectedGraph[NodeType]'
+    ) -> 'DirectedGraph[Tuple[bool, NodeType]]':
         """
         Generates a new directed graph by making the directed join of both
         graphs:
@@ -228,8 +229,8 @@ class DirectedGraph(Generic[NodeType], DiGraph, abc.MutableMapping):  # pylint: 
 
     def __matmul__(
             self,
-            other_graph: DirectedGraph[NodeType]
-    ) -> DirectedGraph[Tuple[NodeType, NodeType]]:
+            other_graph: 'DirectedGraph[NodeType]'
+    ) -> 'DirectedGraph[Tuple[NodeType, NodeType]]':
         """
         Generates a new directed graph by making the product of the graph in
         that:
@@ -253,8 +254,8 @@ class DirectedGraph(Generic[NodeType], DiGraph, abc.MutableMapping):  # pylint: 
             for key0, key1 in product(self, other_graph)})
 
     def __mul__(
-            self, other_graph: DirectedGraph[NodeType]
-    ) -> DirectedGraph[Tuple[NodeType, NodeType]]:
+            self, other_graph: 'DirectedGraph[NodeType]'
+    ) -> 'DirectedGraph[Tuple[NodeType, NodeType]]':
         """
         Generates a new directed graph by making the directed product of both
         graphs (lexicographic order)
@@ -273,7 +274,7 @@ class DirectedGraph(Generic[NodeType], DiGraph, abc.MutableMapping):  # pylint: 
 
     def remap_names(
             self, key_func: Callable[[Any], Any]
-    ) -> DirectedGraph[Any]:
+    ) -> 'DirectedGraph[Any]':
         """
         Remap the graph nodes to new names using a function key_func to
         generate the new names.
@@ -286,7 +287,7 @@ class DirectedGraph(Generic[NodeType], DiGraph, abc.MutableMapping):  # pylint: 
                 for value, labels in values.items()}
             for key, values in self.items()})
 
-    def integerify(self) -> DirectedGraph[int]:
+    def integerify(self) -> 'DirectedGraph[int]':
         """
         Remap the graph nodes to integers, starting from 0 in the order of
         access in the underlying dictionary
@@ -296,7 +297,7 @@ class DirectedGraph(Generic[NodeType], DiGraph, abc.MutableMapping):  # pylint: 
         remapping = {node: index for index, node in sorted_nodes}
         return self.remap_names(remapping.get)
 
-    def stringify(self) -> DirectedGraph[str]:
+    def stringify(self) -> 'DirectedGraph[str]':
         """
         Remap the graph nodes to strings generated from the
         hash code of each key
@@ -306,7 +307,7 @@ class DirectedGraph(Generic[NodeType], DiGraph, abc.MutableMapping):  # pylint: 
     def rand_prune(
             self, pruning_factor: float,
             random_generator: Optional[random.Random] = None
-    ) -> DirectedGraph[NodeType]:
+    ) -> 'DirectedGraph[NodeType]':
         """
         Randomly prune nodes out of the graph. The number of nodes pruned out
         of the graph is floor(pruning_factor * len(self)),
@@ -765,11 +766,11 @@ def random_walk_edge_sample(
 
 
 def n_hop_sample(
-        graph: DiGraph[NodeType],
+        graph: 'DiGraph[NodeType]',
         n_hops: int,
         seeds: Optional[Iterable[ArrowType]] = None,
         n_seeds: int = 1,
-        rng: Optional[random.Random] = None) -> DiGraph[NodeType]:
+        rng: Optional[random.Random] = None) -> 'DiGraph[NodeType]':
     """
     N-hop sampling from random or specified locations
 
@@ -868,7 +869,7 @@ def augment_graph(graph: DirectedGraph, revers_rels: dict):
             graph[dst][src].update({revers_id: None})
 
 
-def create_revers_rels(revers_rels_str: dict, relation2id: dict) -> list(dict, dict, dict):
+def create_revers_rels(revers_rels_str: dict, relation2id: dict) -> 'list(dict, dict, dict)':
     """Create new relation2id and relation_id2vec dictionaries, as well as
     revers_rels dictionary, that should be passed to augment_graph function.
     """
