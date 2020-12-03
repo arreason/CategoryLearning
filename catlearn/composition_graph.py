@@ -49,6 +49,8 @@ class CompositeArrow(Generic[NodeType, ArrowType], abc.Sequence):  # pylint: dis
             self._arrows = tuple(arrows)  # type: ignore
 
         if not len(self.nodes) == len(self.arrows) + 1:
+            print(f'nodes: {nodes}')
+            print(f'arrows: {arrows}')
             raise ValueError("nodes and arrows length don't match")
 
     def derive(self) -> 'CompositeArrow[ArrowType, NodeType]':

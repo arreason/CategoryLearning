@@ -67,5 +67,5 @@ def save_params(
     """
     wandb.log({
         "params": {
-            name: Tsor(param) for (name, param) in model.named_parameters()}
+            name: param.cpu() for (name, param) in model.named_parameters()}
     })

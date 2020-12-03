@@ -1,10 +1,6 @@
 # Strictly required
 numpy
 scipy>=1.1.0
-pytest
-pytest-cov
-pytest-rerunfailures
-pylint
 scikit-learn
 networkx
 torch>=1.0,<2.0
@@ -12,18 +8,9 @@ torchvision
 
 # Additional
 ipython
-jupyter
-jupyterlab
-pandas
-plotly
-pyyaml
-testfixtures
-matplotlib
 tqdm
-word2vec
 graphistry
 wandb
-seaborn
 
 # Debug
 Pympler
