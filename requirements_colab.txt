@@ -11,6 +11,7 @@ ipython
 tqdm
 graphistry
 wandb
+word2vec
 
 # Debug
 Pympler
