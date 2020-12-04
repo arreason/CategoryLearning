@@ -20,8 +20,8 @@ from tests.test_tools import pytest_generate_tests
 
 from catlearn.graph_utils import (
     DirectedGraph, DirectedAcyclicGraph, GraphRandomFactory,
-    sample, pagerank_sample, hubs_sample, authorities_sample,
-    uniform_sample, random_walk_vertex_sample,
+    sample_vertices, pagerank_sample, hubs_sample, authorities_sample,
+    uniform_vertex_sample, random_walk_vertex_sample,
     random_walk_edge_sample, n_hop_sample, generate_random_graph)
 
 
@@ -552,19 +552,19 @@ class TestSubgraphSampling:
         return request.param
 
     @staticmethod
-    def test_sample(graph, rng):
+    def test_sample_vertices(graph, rng):
         """ Test sample respect a simple probability distribution: only first k nodes """
         firsts = frozenset(list(graph)[:5])
         ranking = lambda g: {v: 1.0 if v in firsts else 0.0 for v in g}
-        sg = sample(graph, len(graph), ranking, rng)
+        sg = sample_vertices(graph, len(graph), ranking, rng)
         selected = frozenset(list(sg))
         assert selected <= firsts
 
     @staticmethod
-    def test_uniform(graph, rng):
+    def test_uniform_vertex(graph, rng):
         """ Sanity checks on uniform sampler """
         n_vertices = max(1, len(graph) - 4)
-        sg = uniform_sample(graph, n_vertices, rng)
+        sg = uniform_vertex_sample(graph, n_vertices, rng)
         assert 1 <= len(sg) <= n_vertices
         assert all(v in graph for v in sg)
 

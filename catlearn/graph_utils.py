@@ -9,7 +9,7 @@ from typing import (
     Iterable, FrozenSet, Sequence, TypeVar, Generic,
     Optional, Callable, Tuple, Iterator, Type, Any, Mapping)
 from itertools import chain, product
-from collections import abc
+from collections import abc, defaultdict
 import random
 import pickle
 
@@ -543,7 +543,7 @@ def generate_random_graph(
     return factory.graphs[idx]
 
 
-def sample(
+def sample_vertices(
         graph: DirectedGraph[NodeType],
         sample_vertices_size: int,
         ranking: Callable[[DirectedGraph[NodeType]], Mapping[NodeType, float]],
@@ -569,6 +569,46 @@ def sample(
     return graph.subgraph(sampled_vertices)
 
 
+def sample_edges(
+        graph: DirectedGraph[NodeType],
+        sample_edges_size: int,
+        ranking: Callable[
+            [DirectedGraph[NodeType]],
+            Mapping[Tuple[NodeType, NodeType, Any, Any], float]],
+        rng: random.Random) -> DirectedGraph[NodeType]:
+    """
+    Sample a random subgraph of `graph` with respect to a probability
+    distribution `ranking` over the edges. Only works for graphs
+    with labels.
+
+    Params:
+    - graph: Input graph
+    - sample_edges_size: number of edges to sample
+        (with replacement so actual number might be lower)
+    - ranking: probability distribution over the input graph edges
+    - rng: Random generator
+
+    Returns:
+    A valid random subgraph
+
+    """
+    ranks = list(ranking(
+        chain(*(
+            ((src, tar, label, value) for (label, value) in labels.items())
+            for (src, tar, labels) in graph.edges(data=True)))
+    ))
+    edges, weights = zip(*ranks)
+    sampled_edges = set(
+        rng.choices(edges, weights, k=int(sample_edges_size))
+    )
+
+    graph_dict = defaultdict(lambda: defaultdict(lambda: {}))
+    for (src, tar, label, value) in sampled_edges:
+        graph_dict[src][tar][label] = value
+
+    return DirectedGraph(graph_dict)
+
+
 def pagerank_sample(
         graph: DirectedGraph[NodeType],
         sample_vertices_size: int,
@@ -581,7 +621,7 @@ def pagerank_sample(
     Pagerank calculation: see `networkx.pagerank`
     NB: `kwargs are all passed to `networkx.pagerank`
     """
-    return sample(
+    return sample_vertices(
         graph, sample_vertices_size, lambda g: pagerank(g, **kwargs), rng)
 
 
@@ -597,7 +637,7 @@ def hubs_sample(
     Pagerank calculation: see `networkx.hits`
     NB: `kwargs are all passed to `networkx.hits`
     """
-    return sample(
+    return sample_vertices(
         graph, sample_vertices_size, lambda g: hits(g, **kwargs)[0], rng)
 
 
@@ -613,11 +653,11 @@ def authorities_sample(
     Pagerank calculation: see `networkx.hits`
     NB: `kwargs are all passed to `networkx.hits`
     """
-    return sample(
+    return sample_vertices(
         graph, sample_vertices_size, lambda g: hits(g, **kwargs)[1], rng)
 
 
-def uniform_sample(
+def uniform_vertex_sample(
         graph: DirectedGraph[NodeType],
         sample_vertices_size: int,
         rng: random.Random) -> DirectedGraph[NodeType]:
@@ -627,8 +667,25 @@ def uniform_sample(
     Details of parameters: see `sample`
     """
     n = len(graph)
-    return sample(graph, sample_vertices_size,
-                  lambda G: {v: 1.0/n for v in G}, rng)
+    return sample_vertices(
+        graph, sample_vertices_size,
+        lambda G: {v: 1.0/n for v in G}, rng)
+
+
+def uniform_edge_sample(
+        graph: DirectedGraph[NodeType],
+        sample_edges_size: int,
+        rng: random.Random) -> DirectedGraph[NodeType]:
+    """
+    Sample a random subgraph of `graph` with a uniform probability over edges
+
+    Details of parameters: see `sample`
+    """
+    n = sum(len(labels) for (_, _, labels) in graph.edges(data=True))
+    return sample_edges(
+        graph, sample_edges_size,
+        lambda G: {e: (1.0/n for v in G)}, rng)
+
 
 def random_walk_vertex_sample(
         graph: DirectedGraph[NodeType],
