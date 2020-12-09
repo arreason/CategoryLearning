@@ -1,9 +1,10 @@
 """Module with tools to cache relations"""
 from types import MappingProxyType
 from typing import (
-    Mapping, Callable, Iterable, Generic,
+    Mapping, Callable, Iterable, Generic, Union, List,
     Tuple, Iterator, Hashable, Optional, FrozenSet)
 from collections import abc, defaultdict
+from itertools import product
 from math import inf
 
 import torch
@@ -193,7 +194,7 @@ class RelationCache(
         self._graph = CompositionGraph[NodeType, ArrowType, Tsor](
             self._graph_comp(), ())
 
-        # register wraping attributes
+        # register wraping attributestriplets = 
         self.add = self._graph.add
         self.graph = self._graph.graph
 
@@ -421,7 +422,8 @@ class RelationCache(
 
     def match(
             self, labels: DirectedGraph[NodeType],
-            match_negatives: bool = True) -> Tsor:
+            match_negatives: bool = True) -> DirectedGraph[
+                Union[NodeType, NegativeMatch]]:
         """
         Match the composition graph with a graph of labels. For each label
         vector, get the best match in the graph. if No match is found, set to
@@ -492,3 +494,35 @@ class RelationCache(
                 result_graph[src][tar].pop(NegativeMatch(best_match), None)
 
         return result_graph
+
+
+def sort_relations(
+        cache: RelationCache[NodeType, ArrowType],
+        src: Optional[NodeType] = None, tar: Optional[NodeType] = None,
+        labels: Optional[FrozenSet[ArrowType]] = None) -> List:
+    """
+    Given a result graph from a match, sort available relations matching
+    the specific properties (in terms of score):
+    - if src is given, will only look at relations with this source
+    - if tar is given, will only look at relations with this target
+    - if labels is given, will only look at the score corresponding to
+    the sum for these labels. Otherwise will list all possible
+    individual label scores.
+    """
+    arrows = cache.arrows(src, tar, include_non_causal=False)
+
+    if labels is None:
+        options = product(arrows, cache.label_universe)
+        def key_func(
+                opt: Tuple[CompositeArrow[NodeType, ArrowType], ArrowType]):
+            return kl_match(cache[opt[0]], cache.label_universe[opt[1]])
+        return sorted(options, key_func)
+
+    options = arrows
+    def key_func(  # pylint: disable=function-redefined
+            opt: CompositeArrow[NodeType, ArrowType],
+    ) -> List:
+        return sum(
+            kl_match(cache[opt], cache.label_universe[label])
+            for label in labels)
+    return sorted(options, key_func)
