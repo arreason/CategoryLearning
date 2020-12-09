@@ -12,12 +12,10 @@ from catlearn.composition_graph import NodeType, ArrowType, DirectedGraph
 from catlearn.relation_cache import RelationCache
 from catlearn.categorical_model import TrainableDecisionCatModel
 
-project = 'catlearn'
-config = {}
-
 
 wandb.login()
-wandb.init(project=project, config=config)
+wandb.init(project='catlearn', config={})
+
 
 def log_results(
     cache: RelationCache[NodeType, ArrowType],
@@ -26,6 +24,19 @@ def log_results(
     """
         Log results from a training step
     """
+
+    # sanity check: info_to_log shouldn't override default logs
+    if {
+            'nb_labels', 'total_match_cost', 'total_causality_cost',
+            'cost_per_label', 'arrow_numbers'} and info_to_log:
+        raise ValueError(
+            'cannot provide any of the default keywords to log.'
+            'Default keywords are:\n'
+            '    nb_labels\n'
+            '    total_match_cost\n'
+            '    total_causality_cost\n'
+            '    cost_per_label\n'
+            '    arrow_numbers\n')
 
     # costs
     total = sum(
@@ -59,13 +70,12 @@ def log_results(
     })
 
 def save_params(
-    model: TrainableDecisionCatModel
-):
+    model: TrainableDecisionCatModel):
     """
     Save relation and scoring model parameters
     for a trainable decision cat model
     """
     wandb.log({
         "params": {
-            name: Tsor(param) for (name, param) in model.named_parameters()}
+            name: Tsor(param) for (name, param) in model.named_parameters()},
     })
