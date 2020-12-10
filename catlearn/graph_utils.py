@@ -18,7 +18,7 @@ import torch
 import numpy as np
 import networkx as nx
 from networkx import DiGraph, NetworkXError, pagerank, hits
-from catlearn.utils import str_color
+from catlearn.utils import (str_color, one_hot)
 
 NodeType = TypeVar("NodeType")
 ArrowType = TypeVar("ArrowType")
@@ -99,7 +99,7 @@ class DirectedGraph(Generic[NodeType], DiGraph, abc.MutableMapping):  # pylint: 
 
     def under(self, root: NodeType) -> FrozenSet[NodeType]:
         """
-        Returns the set of all nodes acessible from given root,
+        Returns the set of all nodes accessible from given root,
         (not included root itself unless there is a cycle going back to it)
         """
         # get the set of first order children
@@ -682,6 +682,7 @@ def random_walk_vertex_sample(
     - n_seeds: to start random walk on specified number of uniformly selected vertices
     - use_opposite: if True, randomly walk either direct or dual graph fairly
 
+    Number of returner nodes is always inferior to the number of iterations.
     Returns: a valid subgraph, where all edges existing between sampled vertices are kept
     """
     if len(graph) == 0:
@@ -690,7 +691,6 @@ def random_walk_vertex_sample(
         sampled_vertices = list(rng.choices(list(graph), k=n_seeds))
     else:
         sampled_vertices = list(seeds)
-
     i = 0
     while i < n_iter:
         i += 1
@@ -712,6 +712,10 @@ def random_walk_edge_sample(
         use_both_ends: bool = False) -> DirectedGraph[NodeType]:
     """
     Random Walk graph edge subsampling
+    NOTE: for large n_seeds equivalent for breath-first graph traversal
+    with maximal depth of 1 and maximal degree of connection 3.
+    NOTE: maximal degree of connection is not equivalent to graph diameter,
+    but can be assumed as diameter for simplicity.
 
     Params:
     - graph: the input graph
@@ -740,7 +744,6 @@ def random_walk_edge_sample(
         sampled_edges = list(rng.choices(list(graph.edges), k=n_seeds))
     else:
         sampled_edges = list(seeds)
-
     i = 0
     sampled_graph = DirectedGraph(sampled_edges)
     while i < n_iter:
@@ -750,7 +753,6 @@ def random_walk_edge_sample(
         use_src = use_both_ends and rng.randint(0, 1) # Flip a coin
         src = e[0] if use_src else e[1]
         gview = graph.op if use_op else graph
-
         compatible_edges = [
             (dst, {}) for dst in gview[src] if not gview[src][dst]
         ] + [
@@ -772,7 +774,9 @@ def n_hop_sample(
         n_seeds: int = 1,
         rng: Optional[random.Random] = None) -> 'DiGraph[NodeType]':
     """
-    N-hop sampling from random or specified locations
+    N-hop sampling from random or specified locations.
+    Only samples in straight edge direction.
+    No control over length of returned graph
 
     Params:
     - graph: the input graph
@@ -791,7 +795,6 @@ def n_hop_sample(
         sampled_vertices = set(rng.choices(list(graph), k=n_seeds))
     else:
         sampled_vertices = set(seeds)
-
     for _ in range(1, n_hops):  # Seed sampling is considered 1st hop
         visited_vertices = set()
         for v in sampled_vertices:
@@ -830,13 +833,6 @@ def clean_isolates(
         print(f'{len(isolates)} isolates are removed.')
 
 
-def one_hot(sample_id: int, nb_samples: int) -> torch.tensor:
-    """create torch OH vector for an id position inside this tensor"""
-    enc_sample = torch.zeros(nb_samples)
-    enc_sample[sample_id] = 1.0
-    return enc_sample
-
-
 def init_relation_vectors(relation2id: dict) -> dict:
     """one-hot representation of entities
     equivalent to label_universe required by TrainableDecisionCatModel
@@ -859,7 +855,7 @@ def augment_graph(graph: DirectedGraph, revers_rels: dict):
     Only for Directional, not multirelational graphs (single relation per edge).
     Edge data are created in the format {id: None}.
     If there are custom edge data different from None,
-    another function must be created. 
+    another function must be created.
     """
     for src, dst, rel in graph.edges(data=True):
         rel_id = list(rel.keys())[0]
@@ -877,15 +873,18 @@ def create_revers_rels(revers_rels_str: dict, relation2id: dict) -> 'list(dict, 
     relation_id2vec_augmented = {}
     revers_rels = {}
     offset = len(relation2id)
+    i = 0
     for rel, revers in revers_rels_str.items():
         rel_id = relation2id[rel]
         relation2id_augmented[rel] = rel_id
         if not revers:
+            print('continued with revers: {revers}')
             continue
         if relation2id.get(revers):
             revers_id = relation2id[revers]
         else:
-            revers_id = rel_id + offset
+            revers_id = i + offset
+            i += 1
         revers_rels[rel_id] = revers_id
         relation2id_augmented[revers] = revers_id
     relation_id2vec_augmented = init_relation_vectors(relation2id_augmented)

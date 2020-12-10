@@ -45,11 +45,12 @@ def write_file(path: str, to_file: Union[Dict, Set, List], force: bool=False):
             for v in to_file:
                 f.write(str(v) + '\n')
         elif (isinstance(to_file, list)
+                and to_file
                 and len(to_file)
                 and all(type(v) in [int, float, str] for v in to_file)
         ):
             for v in to_file:
-                f.write(str(v) + '\n') 
+                f.write(str(v) + '\n')
         else:
             raise ValueError('Unsupported datatype for writing to a file.')
 
@@ -83,6 +84,10 @@ def preprocess(path: str):
     Create dictionaries of entities and relations with appropriate mappings.
     Generated sets of unique entities and relations are stored in separate files
     using names from config.
+    Saved files:
+    entity2id and realtion2id are created from a dictionary where key is str(entity_name)
+    and value is an integer from 0 to len(entities_set) range
+    word_set is specific for wn_18 and saved only a list of unique words
 
     Args:
         path (str): path where raw dataset files 'train.txt', 'valid.txt',

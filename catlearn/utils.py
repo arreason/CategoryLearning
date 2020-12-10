@@ -2,6 +2,7 @@
 import os
 import warnings
 import logging
+import torch
 
 
 def init_logger():
@@ -33,3 +34,9 @@ def str_color(color_type: str, string: str) -> str:
         return COLOR_SEQ % (30 + COLORS['WARNING']) + string + RESET_SEQ
     warnings.warn('Unknown color is specified in str_color(). Raw string returned.', UserWarning)
     return string
+
+def one_hot(sample_id: int, nb_samples: int) -> torch.tensor:
+    """create torch OH vector for an id position inside this tensor"""
+    enc_sample = torch.zeros(nb_samples)
+    enc_sample[sample_id] = 1.0
+    return enc_sample

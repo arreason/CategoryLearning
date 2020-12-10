@@ -39,7 +39,6 @@ class ScoringModel(AbstractModel):
 
 
 # pylint: enable=missing-docstring
-
 class DecisionCatModel:
     """
     A class to abstract a decision categorical model
@@ -173,9 +172,6 @@ class DecisionCatModel:
         Load a model from a given location (path or file-like object)
         """
         return torch.load(flike)
-
-
-
 
 
 class TrainableDecisionCatModel(DecisionCatModel, AbstractModel):

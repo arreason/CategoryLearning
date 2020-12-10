@@ -1,8 +1,12 @@
+"""Dataset reads and preprocesses datasets.
+It is a composed object that includes both, dataset and dataloader.
+"""
 import os
-from typing import Dict, Tuple, Generator
+from typing import Dict, Tuple, Generator, Union
 import pickle
 import torch
 from catlearn.data.config import (raw_dataset_pat, preproc_pat)
+from catlearn.utils import one_hot
 from catlearn.tensor_utils import Tsor
 import catlearn.data.utils as data_utils
 
@@ -116,9 +120,6 @@ class Dataset():
                 ) for u, e, v in raw_dataset)
         raise ValueError(f'Unknown dataset name ${self.ds_name}')
 
-        # def augment_dataset(self, opposites_dict:):
-            # """Check opposite labels always exist and update if it doesn't"""
-
     def _format_id_map(self, id_map: Generator, ds_name: str) -> Dict[str, int]:
         """Creates a dictionary from read mapping of relation or entity to ID."""
         if (ds_name == 'wn18'
@@ -148,8 +149,14 @@ class Dataset():
             self.read_file(os.path.join(self.path, self.prep_pat['relation2id'])),
             self.ds_name
         )
-        self.id2entity = {v: k for k, v in self.entity2id.items()}
-        self.id2relation = {v: k for k, v in self.relation2id.items()}
+        # self.id2entity = len(self.entity2id) * [None]
+        # self.id2relation = len(self.relation2id) * [None]
+        self.id2entity = {key: value for value, key in self.entity2id.items()}
+        # for value, key in self.entity2id.items():
+            # self.id2entity[key] = value
+        self.id2relation = {key: value for value, key in self.relation2id.items()}
+        # for value, key in self.relation2id.items():
+            # self.id2relation[key] = value
 
     def init_entity_vectors(self):
         """initialize entity2vec and rel2vec
@@ -157,14 +164,17 @@ class Dataset():
         in TrainableDecisionCatModel.
         self.entity_vec_dim is ignored when initializer is provided
         """
+        # self.entity_id2vec = len(self.id2entity) * [None]
         if self.node2vec_path:
             with open(self.node2vec_path, 'rb') as f:
                 node2vec_dict = pickle.load(f)
-            self.entity_id2vec = {k: Tsor(node2vec_dict[self.id2entity[k]])
-                for k in self.id2entity.keys()}
+            self.entity_id2vec = {idx: Tsor(node2vec_dict[value]) for idx, value in self.id2entity.items()}
+            # for key, value in enumerate(self.id2entity):
+                # self.entity_id2vec[key] = Tsor(node2vec_dict[value])
         else:
-            self.entity_id2vec = {k: torch.rand(self.entity_vec_dim)
-                for k in self.id2entity.keys()}
+            self.entity_id2vec = {idx: torch.rand(self.entity_vec_dim) for idx in self.id2entity.keys()}
+            # for key, _ in enumerate(self.id2entity):
+                # self.entity_id2vec[key] = torch.rand(self.entity_vec_dim)
 
     def init_relation_vectors(self):
         """one-hot representation of entities
@@ -173,8 +183,16 @@ class Dataset():
         In current implementation, other encodings like embedding vectors are not considered.
         """
         nb_relations = len(self.relation2id)
-        def one_hot(sample_id: int, nb_samples: int):
-            enc_sample = torch.zeros(nb_samples)
-            enc_sample[sample_id] = 1.0
-            return enc_sample
-        self.relation_id2vec = {id: one_hot(id, nb_relations) for id in self.id2relation.keys()}
+        # self.relation_id2vec = nb_relations * [None]
+        self.relation_id2vec = {idx: one_hot(idx, nb_relations) for idx, value in self.id2relation.items()}
+        # for idx, _ in enumerate(self.id2relation):
+            # self.relation_id2vec[idx] = one_hot(idx, nb_relations) 
+
+    def load(self):
+        """Loads generator objects to memory"""
+        if self.train:
+            self.train = list(self.train)
+        if self.valid:
+            self.valid = list(self.valid)
+        if self.test:
+            self.test = list(self.test)
