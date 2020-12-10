@@ -20,9 +20,11 @@ from tests.test_tools import pytest_generate_tests
 
 from catlearn.graph_utils import (
     DirectedGraph, DirectedAcyclicGraph, GraphRandomFactory,
-    sample_vertices, pagerank_sample, hubs_sample, authorities_sample,
-    uniform_vertex_sample, random_walk_vertex_sample,
-    random_walk_edge_sample, n_hop_sample, generate_random_graph)
+    sample_vertices, sample_edges,
+    pagerank_sample, hubs_sample, authorities_sample,
+    uniform_vertex_sample, uniform_edge_sample,
+    random_walk_vertex_sample, random_walk_edge_sample,
+    n_hop_sample, generate_random_graph)
 
 
 @pytest.fixture(params=[0, 432358, 98765, 326710, 54092])
@@ -555,18 +557,37 @@ class TestSubgraphSampling:
     def test_sample_vertices(graph, rng):
         """ Test sample respect a simple probability distribution: only first k nodes """
         firsts = frozenset(list(graph)[:5])
-        ranking = lambda g: {v: 1.0 if v in firsts else 0.0 for v in g}
+        ranking = lambda g: {v: 1. if v in firsts else 0. for v in g}
         sg = sample_vertices(graph, len(graph), ranking, rng)
         selected = frozenset(list(sg))
         assert selected <= firsts
 
     @staticmethod
+    def test_sample_edges(graph, rng):
+        """Test sample of edges with respect to a simple proba dist: only
+        first k nodes"""
+        edges = graph.edges
+        firsts = frozenset(list(edges)[:5])
+        ranking = lambda g: {e: 1. if e in firsts else 0. for e in edges}
+        sg = sample_edges(graph, len(list(edges)), ranking, rng)
+        selected = frozenset(list(sg.edges))
+        assert selected <= firsts
+
+    @staticmethod
     def test_uniform_vertex(graph, rng):
-        """ Sanity checks on uniform sampler """
+        """ Sanity checks on uniform vertex sampler """
         n_vertices = max(1, len(graph) - 4)
         sg = uniform_vertex_sample(graph, n_vertices, rng)
         assert 1 <= len(sg) <= n_vertices
         assert all(v in graph for v in sg)
+
+    @staticmethod
+    def test_uniform_edge(graph, rng):
+        """Sanity checks on uniform edge sampler"""
+        n_edges = max(1, len(list(graph.edges)) - 4)
+        sg = uniform_edge_sample(graph, n_edges, rng)
+        assert 1 <= len(sg) <= n_edges
+        assert all(e in graph for e in sg)
 
     # Sometimes the algorithm does not converge
     @pytest.mark.flaky(reruns=3)
