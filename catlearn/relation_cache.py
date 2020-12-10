@@ -2,7 +2,7 @@
 from types import MappingProxyType
 from typing import (
     Mapping, Callable, Iterable, Generic, Union, List,
-    Tuple, Iterator, Hashable, Optional, FrozenSet)
+    Tuple, Iterator, Hashable, Optional, FrozenSet, OrderedDict)
 from collections import abc, defaultdict
 from itertools import product
 from math import inf
@@ -498,7 +498,8 @@ class RelationCache(
     def sort_relations(
             self,
             src: Optional[NodeType] = None, tar: Optional[NodeType] = None,
-            labels: Optional[FrozenSet[ArrowType]] = None) -> List:
+            labels: Optional[FrozenSet[ArrowType]] = None
+    ) -> OrderedDict[Tuple[NodeType, NodeType, FrozenSet[ArrowType]], float]:
         """
         Given a result graph from a match, sort available relations matching
         the specific properties (in terms of score):
@@ -511,17 +512,16 @@ class RelationCache(
         arrows = self.arrows(src, tar, include_non_causal=False)
 
         if labels is None:
-            options = product(arrows, self.label_universe)
-            def key_func(
-                    opt: Tuple[CompositeArrow[NodeType, ArrowType], ArrowType]):
-                return kl_match(self[opt[0]], self.label_universe[opt[1]])
-            return sorted(options, key_func)
+            options = {
+                (arr[0], arr[-1], FrozenSet((label,))): kl_match(
+                    self[arr], self.label_universe[label])
+                for (arr, label) in product(arrows, self.label_universe)}
+        else:
+            options = {
+                (arr[0], arr[-1], labels): sum(
+                    kl_match(self[arr], self.label_universe[label])
+                    for label in labels)
+                for arr in arrows}
 
-        options = arrows
-        def key_func(  # pylint: disable=function-redefined
-                opt: CompositeArrow[NodeType, ArrowType],
-        ) -> List:
-            return sum(
-                kl_match(self[opt], self.label_universe[label])
-                for label in labels)
-        return sorted(options, key_func)
+        return OrderedDict[Tuple[NodeType, NodeType, FrozenSet(ArrowType)]](
+            sorted(options.items(), options.get))
