@@ -147,6 +147,12 @@ def ones_like(
     return full_like(1.0, tensor, shape)
 
 
+def one_hot(label: int, nb_labels):
+    enc = torch.zeros(nb_labels)
+    enc[label] = 1.0
+    return enc
+
+
 def clip_proba(
         proba_vector: Tsor,
         dim: int = -1,
