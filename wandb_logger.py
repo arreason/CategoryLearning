@@ -2,7 +2,7 @@
 A simple module to initialize wandb and define log functionalities for catlearn
  models
 """
-from typing import Any
+from typing import Any, Tuple, Optional, OrderedDict, FrozenSet
 from collections import defaultdict
 from itertools import chain
 import wandb
@@ -68,6 +68,47 @@ def log_results(
         'cost_per_label': cost_per_label,
         'arrow_numbers': arrows,
         **info_to_log
+    })
+
+
+def log_KGE_metrics(
+    cache: RelationCache[NodeType, ArrowType],
+    triplets: List[Tuple[
+        Tuple[
+            Optional[NodeType], Optional[NodeType],
+            Optional[FrozenSet[ArrowType]]],
+        Tuple[NodeType, NodeType, FrozenSet[ArrowType]]]]) -> None:
+    """
+    Compute KGE metrics for a list of tuples containing:
+    - a request triplet of the form (src, tar, label) where any of
+        the 3 values may be None, meaning we want to find a match for it
+    - an evaluation triplet of the form (src, tar, label) with the actual values
+    """
+    # compute ranks for each triplet
+    ranks = {
+        triplet: list(cache.sort_relations(*triplet)) for triplet in triplets}
+
+    sum_ranks = 0
+    sum_inverse_ranks = 0
+    nonhits_at_n = defaultdict(lambda: 0.)
+    for triplet, rank_list in ranks.items():
+        triplet_rank = rank_list.index(triplet)
+        sum_ranks += triplet_rank + 1.
+        sum_inverse_ranks += 1./(triplet_rank + 1.)
+        for valid_rank in range(triplet_rank):
+            nonhits_at_n[valid_rank] += 1.
+
+    nb_triplets = len(triplets)
+    mean_rank = sum_ranks/nb_triplets
+    mean_reciprocal_ranks = sum_inverse_ranks/nb_triplets
+    hits_at_n = [
+        1. - nonhits_at_n[rank]/nb_triplets
+        for rank in range(max(nonhits_at_n) + 1)]
+
+    wandb.log({
+        "mean_rank": mean_rank,
+        "mean_reciprocal_ranks": mean_reciprocal_ranks,
+        "hits_at_n": hits_at_n,
     })
 
 
