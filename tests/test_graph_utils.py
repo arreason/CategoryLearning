@@ -595,7 +595,8 @@ class TestSubgraphSampling:
         sg = uniform_edge_sample(graph, n_edges, rng)
         se = sg.edges
         assert 0 <= len(se) <= n_edges
-        assert all(e in graph for e in sg)
+        assert all(v in graph for v in sg)
+        assert all(e in graph.edges for e in se)
 
     # Sometimes the algorithm does not converge
     @staticmethod
