@@ -764,7 +764,8 @@ def uniform_vertex_sample(
 def uniform_edge_sample(
         graph: DirectedGraph[NodeType],
         sample_edges_size: int,
-        rng: random.Random) -> DirectedGraph[NodeType]:
+        rng: random.Random,
+        with_labels: bool = False) -> DirectedGraph[NodeType]:
     """
     Sample a random subgraph of `graph` with a uniform probability over edges
 
@@ -772,7 +773,7 @@ def uniform_edge_sample(
     """
     return sample_edges(
         graph, sample_edges_size,
-        lambda G: {e: 1. for e in G}, rng)
+        lambda G: {e: 1. for e in G}, rng, with_labels=with_labels)
 
 
 def random_walk_vertex_sample(

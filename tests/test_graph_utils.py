@@ -591,9 +591,10 @@ class TestSubgraphSampling:
     @staticmethod
     def test_uniform_edge(graph, rng):
         """Sanity checks on uniform edge sampler"""
-        n_edges = max(1, len(list(graph.edges)) - 4)
+        n_edges = max(0, len(list(graph.edges)) - 4)
         sg = uniform_edge_sample(graph, n_edges, rng)
-        assert 1 <= len(sg) <= n_edges
+        se = sg.edges
+        assert 0 <= len(se) <= n_edges
         assert all(e in graph for e in sg)
 
     # Sometimes the algorithm does not converge
