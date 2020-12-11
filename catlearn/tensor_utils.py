@@ -8,7 +8,7 @@ Created on Wed May 30 20:53:39 2018
 various utilities for tensor manipulation
 """
 
-from typing import Optional, Sequence, Callable, Iterable, Tuple, Any
+from typing import Optional, Sequence, Iterable, Tuple
 import torch
 from torch import Tensor as Tsor
 from torch.nn.functional import kl_div

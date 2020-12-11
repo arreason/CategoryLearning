@@ -8,7 +8,7 @@ from __future__ import annotations
 from functools import reduce
 from itertools import chain
 from operator import mul
-from typing import Any, Callable, Sequence, Tuple, Iterable, Union, IO
+from typing import Callable, Sequence, Tuple, Iterable, Union, IO
 import torch
 import torch.nn as nn
 
@@ -111,6 +111,7 @@ class LayeredModel(nn.Module):
         """ Get expected number of elements of output tensor
 
         """
+        #pylint: disable=unnecessary-lambda
         return reduce(mul, self.output_shape, 1)
 
     @property
@@ -118,6 +119,7 @@ class LayeredModel(nn.Module):
         """ Gather children models of parent
 
         """
+        #pylint: disable=unnecessary-lambda
         return lambda: self.layers.children()
 
     def named_parameters(
@@ -331,7 +333,7 @@ class FullPerceptronWithRandomState(LayeredModel):
             (num_inputs,), output_shape, num_units, activation_factory)
 
         # add input augmentation at beginning of ops list and call parent init
-        op_list = chain([ConstantModel(self.augment_input, f"RandomAugment")],
+        op_list = chain([ConstantModel(self.augment_input, "RandomAugment")],
                         deterministic_model.children())
         LayeredModel.__init__(self, input_shape, output_shape, op_list)
 

@@ -7,7 +7,7 @@ for the categorical model
 from itertools import chain
 from types import MappingProxyType
 
-from typing import Any, Callable, IO, Iterable, Mapping, Tuple, Union, Optional
+from typing import IO, Iterable, Mapping, Tuple, Union, Optional
 
 import torch
 from torch.optim import Optimizer

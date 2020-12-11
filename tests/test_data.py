@@ -1,20 +1,17 @@
-from typing import (
-    Any, Callable, Hashable, Dict, Iterable, Tuple,
-    Set, FrozenSet, Optional, List)
+"""Module to test data processing sub-library"""
+from typing import (Any, Dict, List)
 import os
-import numpy
-import torch
 import pickle as pkl
 from testfixtures import TempDirectory
 
+#pylint: disable=unused-import
 from tests.test_tools import pytest_generate_tests
 
 from catlearn.graph_utils import DirectedGraph
-from catlearn.data.dataset import Dataset
-import catlearn.data.utils as data_utils
-from catlearn.data.config import raw_dataset_pat, preproc_pat
-from catlearn.tensor_utils import Tsor
+from data.dataset import Dataset
+from data.config import raw_dataset_pat, preproc_pat
 
+#pylint: disable=too-few-public-methods
 class TestDataset:
     """
     Unit tests for Dataset class

@@ -13,7 +13,6 @@ import warnings
 from collections import abc
 import random
 import pickle
-import torch
 
 import numpy as np
 import networkx as nx
@@ -51,8 +50,8 @@ class DirectedGraph(Generic[NodeType], DiGraph, abc.MutableMapping):  # pylint: 
         """
         try:
             self.remove_node(node)
-        except NetworkXError:
-            raise KeyError(f"{node} could not be found in graph")
+        except NetworkXError as cannot_remove_node:
+            raise KeyError(f"{node} could not be found in graph") from cannot_remove_node
 
     def __setitem__(
             self, node: NodeType, children: Iterable[NodeType]) -> None:
@@ -318,6 +317,7 @@ class DirectedGraph(Generic[NodeType], DiGraph, abc.MutableMapping):  # pylint: 
         nb_to_prune = int(np.floor(pruning_factor * len(self)))
 
         # Node sampler
+        #pylint: disable=unnecessary-lambda
         if random_generator is None:
             choice = lambda g: random.choice(g)
         else:
@@ -562,6 +562,7 @@ def pagerank_sample(
     Pagerank calculation: see `networkx.pagerank`
     NB: `kwargs are all passed to `networkx.pagerank`
     """
+    #pylint: disable=unnecessary-lambda
     return sample(
         graph, sample_vertices_size, lambda g: pagerank(g, **kwargs), rng)
 
@@ -687,7 +688,7 @@ def random_walk_vertex_sample(
     """
     if len(graph) == 0:
         return DiGraph()
-    elif seeds is None:
+    if seeds is None:
         sampled_vertices = list(rng.choices(list(graph), k=n_seeds))
     else:
         sampled_vertices = list(seeds)

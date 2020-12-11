@@ -16,7 +16,7 @@ def init_logger():
     )
     logging.debug('\nStart logging.')
 
-
+#pylint: disable=unused-variable
 def str_color(color_type: str, string: str) -> str:
     """Function to format strings with color and/or bold font."""
     RESET_SEQ = "\033[0m"

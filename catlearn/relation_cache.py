@@ -1,3 +1,4 @@
+"""Module with tools to cache relations"""
 from types import MappingProxyType
 from typing import (
     Mapping, Callable, Iterable, Generic,

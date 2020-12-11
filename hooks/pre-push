@@ -86,9 +86,13 @@ type_check() {
     fi
 }
 
+# Clean notebook cell outputs
+jupyter nbconvert --clear-output --inplace scripts/*.ipynb
+
 # Run pylint on package
 # Warning and up are logged but are not failing the push
 pylint_check "catlearn/" 2#000011
+pylint_check "data/" 2#000011
 
 # Run pylint on the tests
 pylint_check "tests/" 2#000011 "no-self-use,duplicate-code"
