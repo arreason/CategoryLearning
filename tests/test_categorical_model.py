@@ -29,6 +29,7 @@ from catlearn.categorical_model import (
 from catlearn.algebra_models import (
     Algebra, VectAlgebra, VectMultAlgebra, MatrixAlgebra, AffineAlgebra)
 
+
 # List of algebras to verify
 # Automagic, adding an algebra will get tested right away
 CLASSES_TO_TEST = {VectAlgebra, VectMultAlgebra, MatrixAlgebra, AffineAlgebra}
