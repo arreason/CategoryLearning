@@ -24,12 +24,10 @@ def log_results(
     """
         Log results from a training step
     """
-
-
     # sanity check: info_to_log shouldn't override default logs
-    if {
-            'nb_labels', 'total_match_cost', 'total_causality_cost',
-            'cost_per_label', 'arrow_numbers'} and info_to_log:
+    std_log_keys = ('nb_labels', 'total_match_cost', 'total_causality_cost',
+            'cost_per_label', 'arrow_numbers')
+    if info_to_log and not all(info_key not in std_log_keys for info_key in info_to_log):
         raise ValueError(
             'cannot provide any of the default keywords to log.'
             'Default keywords are:\n'

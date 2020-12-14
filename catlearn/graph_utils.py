@@ -18,6 +18,8 @@ import numpy as np
 import networkx as nx
 from networkx import DiGraph, NetworkXError, pagerank, hits
 from catlearn.utils import (str_color, one_hot)
+from catlearn.utils import (init_logger, str_color)
+
 
 NodeType = TypeVar("NodeType")
 ArrowType = TypeVar("ArrowType")
@@ -674,6 +676,7 @@ def random_walk_vertex_sample(
         use_opposite: bool = False) -> DirectedGraph[NodeType]:
     """
     Random Walk graph vertex subsampling
+    Graph must be inverse-completed
 
     Params:
     - graph: the input graph
@@ -686,8 +689,12 @@ def random_walk_vertex_sample(
     Number of returner nodes is always inferior to the number of iterations.
     Returns: a valid subgraph, where all edges existing between sampled vertices are kept
     """
-    if len(graph) == 0:
+    if len(graph) == 0 or n_seeds == 0:
         return DiGraph()
+    if n_seeds * 2 < n_iter:
+        warning_str = (f'n_iter {n_iter} must be at least > 2 * n_seeds'
+            f' {2 * n_seeds} for consistent sampling results.')
+        warnings.warn(str_color('W', warning_str), UserWarning)
     if seeds is None:
         sampled_vertices = list(rng.choices(list(graph), k=n_seeds))
     else:
@@ -698,9 +705,14 @@ def random_walk_vertex_sample(
         v = rng.choice(sampled_vertices)
         use_op = use_opposite and rng.randint(0, 1) # Flip a coin
         connected_vertices = list(graph.op[v] if use_op else graph[v])
+        # print(connected_vertices)
         if connected_vertices:
             sampled_vertices.append(rng.choice(connected_vertices))
-    return graph.subgraph(sampled_vertices)
+    sampled_subg = graph.subgraph(sampled_vertices)
+    # Heuristic: subgraph edges must be at x2 n_seeds; if not, double n_iter and repeat
+    if len(sampled_subg.edges) > n_seeds * 2 or n_iter > 10^6:
+        return sampled_subg
+    random_walk_vertex_sample(graph, rng, n_iter * 2, seeds, n_seeds, use_opposite)
 
 
 def random_walk_edge_sample(
@@ -879,7 +891,6 @@ def create_revers_rels(revers_rels_str: dict, relation2id: dict) -> 'list(dict, 
         rel_id = relation2id[rel]
         relation2id_augmented[rel] = rel_id
         if not revers:
-            print('continued with revers: {revers}')
             continue
         if relation2id.get(revers):
             revers_id = relation2id[revers]
