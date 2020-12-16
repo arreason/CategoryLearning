@@ -7,6 +7,7 @@ from collections import defaultdict
 from itertools import chain
 import wandb
 import os
+import torch
 
 from catlearn.tensor_utils import Tsor
 from catlearn.composition_graph import NodeType, ArrowType, DirectedGraph
@@ -79,7 +80,7 @@ def save_params(
     for name, param in model.named_parameters():
         wandb.log({
             "params": {
-                name: Tsor(param) for (name, param) in model.named_parameters()}
+                name: torch.FloatTensor(param) for (name, param) in model.named_parameters()}
         })
 
 
