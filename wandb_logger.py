@@ -6,6 +6,7 @@ from typing import Any
 from collections import defaultdict
 from itertools import chain
 import wandb
+import os
 
 from catlearn.tensor_utils import Tsor
 from catlearn.composition_graph import NodeType, ArrowType, DirectedGraph
@@ -68,13 +69,25 @@ def log_results(
         **info_to_log
     })
 
+
 def save_params(
     model: TrainableDecisionCatModel):
     """
     Save relation and scoring model parameters
     for a trainable decision cat model
     """
-    wandb.log({
-        "params": {
-            name: param.cpu() for (name, param) in model.named_parameters()}
-    })
+    for name, param in model.named_parameters():
+        wandb.log({
+            "params": {
+                name: Tsor(param) for (name, param) in model.named_parameters()}
+        })
+
+
+def save_file(file_path: str):
+    """Upload file to wandb run session"""
+    # Convert if Path object is passed
+    file_path = str(file_path)
+    if file_path and os.path.isfile(file_path):
+        wandb.save(file_path)
+    else:
+        print(f'Wrong path: {file_path}')

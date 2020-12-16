@@ -705,14 +705,13 @@ def random_walk_vertex_sample(
         v = rng.choice(sampled_vertices)
         use_op = use_opposite and rng.randint(0, 1) # Flip a coin
         connected_vertices = list(graph.op[v] if use_op else graph[v])
-        # print(connected_vertices)
         if connected_vertices:
             sampled_vertices.append(rng.choice(connected_vertices))
     sampled_subg = graph.subgraph(sampled_vertices)
     # Heuristic: subgraph edges must be at x2 n_seeds; if not, double n_iter and repeat
-    if len(sampled_subg.edges) > n_seeds * 2 or n_iter > 10^6:
+    if len(sampled_subg.edges) >= n_seeds or n_iter > 10**6:
         return sampled_subg
-    random_walk_vertex_sample(graph, rng, n_iter * 2, seeds, n_seeds, use_opposite)
+    return random_walk_vertex_sample(graph, rng, n_iter * 2, seeds, n_seeds, use_opposite)
 
 
 def random_walk_edge_sample(
