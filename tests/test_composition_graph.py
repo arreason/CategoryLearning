@@ -14,6 +14,7 @@ import pytest
 
 from catlearn.composition_graph import CompositeArrow, CompositionGraph
 
+#pylint: disable=unused-import
 from tests.test_tools import pytest_generate_tests
 
 

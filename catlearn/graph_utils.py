@@ -4,20 +4,26 @@ Created on Wed Mar 13 13:47:33 2019
 @author: christophe_c
 A library for graph utilities used in our project.
 """
-from __future__ import annotations
+# from __future__ import annotations
 from typing import (
     Iterable, FrozenSet, Sequence, TypeVar, Generic,
     Optional, Callable, Tuple, Iterator, Type, Any, Mapping)
 from itertools import chain, product
+import warnings
 from collections import abc
 import random
 import pickle
 
 import numpy as np
+import networkx as nx
 from networkx import DiGraph, NetworkXError, pagerank, hits
+from catlearn.utils import (str_color, one_hot)
+from catlearn.utils import (init_logger, str_color)
+
 
 NodeType = TypeVar("NodeType")
 ArrowType = TypeVar("ArrowType")
+
 
 
 def mapping_product(mapping0: Mapping, mapping1: Mapping) -> Iterator:
@@ -32,9 +38,11 @@ def mapping_product(mapping0: Mapping, mapping1: Mapping) -> Iterator:
 
 class DirectedGraph(Generic[NodeType], DiGraph, abc.MutableMapping):  # pylint: disable=unsubscriptable-object
     """
-    A class to encapsulate directed graphs. Initialized from a dictionary:
+    A class to encapsulate directed graphs. Can be initialized from a dictionary:
     Values are iterable which must range over keys of the dictionary.
     For a key k,  v in self[k] means there is a vertex k -> v.
+    Complete list of available input formats:
+    https://networkx.github.io/documentation/stable/reference/classes/digraph.html
     Different graph composition functions are provided in order to facilitate
     the generation of examples.
     """
@@ -44,8 +52,8 @@ class DirectedGraph(Generic[NodeType], DiGraph, abc.MutableMapping):  # pylint: 
         """
         try:
             self.remove_node(node)
-        except NetworkXError:
-            raise KeyError(f"{node} could not be found in graph")
+        except NetworkXError as cannot_remove_node:
+            raise KeyError(f"{node} could not be found in graph") from cannot_remove_node
 
     def __setitem__(
             self, node: NodeType, children: Iterable[NodeType]) -> None:
@@ -64,13 +72,13 @@ class DirectedGraph(Generic[NodeType], DiGraph, abc.MutableMapping):  # pylint: 
                     self[node][child].update(labels)
 
     @property
-    def op(self) -> DirectedGraph[NodeType]:
+    def op(self) -> 'DirectedGraph[NodeType]':
         """
         returns the opposite graph
         """
         return self.reverse(copy=False)
 
-    def dualize_relations(self) -> DirectedGraph[NodeType]:
+    def dualize_relations(self) -> 'DirectedGraph[NodeType]':
         """
         returns the dually augmented graph
 
@@ -92,7 +100,7 @@ class DirectedGraph(Generic[NodeType], DiGraph, abc.MutableMapping):  # pylint: 
 
     def under(self, root: NodeType) -> FrozenSet[NodeType]:
         """
-        Returns the set of all nodes acessible from given root,
+        Returns the set of all nodes accessible from given root,
         (not included root itself unless there is a cycle going back to it)
         """
         # get the set of first order children
@@ -123,7 +131,7 @@ class DirectedGraph(Generic[NodeType], DiGraph, abc.MutableMapping):  # pylint: 
         """
         return self.op.under(root)
 
-    def subgraph(self, nodes: Iterable[NodeType]) -> DirectedGraph[NodeType]:
+    def subgraph_nodes(self, nodes: Iterable[NodeType]) -> 'DirectedGraph[NodeType]':
         """
         Extract a subgraph of current graph constituted of given nodes
         """
@@ -131,7 +139,7 @@ class DirectedGraph(Generic[NodeType], DiGraph, abc.MutableMapping):  # pylint: 
         return type(self)(
             {node: set(self[node]) & nodes_set for node in nodes_set})
 
-    def prune(self, node: NodeType) -> DirectedGraph[NodeType]:
+    def prune(self, node: NodeType) -> 'DirectedGraph[NodeType]':
         """
         Prune a node out of the graph, but making sure that for any subgraph
         i -> pruned_node -> j, there is a i -> j vertex added
@@ -163,8 +171,8 @@ class DirectedGraph(Generic[NodeType], DiGraph, abc.MutableMapping):  # pylint: 
             + ")")
 
     def __or__(
-            self, other_graph: DirectedGraph[NodeType]
-    ) -> DirectedGraph[Tuple[bool, NodeType]]:
+            self, other_graph: 'DirectedGraph[NodeType]'
+    ) -> 'DirectedGraph[Tuple[bool, NodeType]]':
         """
         Generates a new directed graph by making the disjoint sum
         of both graphs. Changes the nodes to:
@@ -182,8 +190,8 @@ class DirectedGraph(Generic[NodeType], DiGraph, abc.MutableMapping):  # pylint: 
         return type(self)({**remap_self, **remap_other})
 
     def __and__(
-            self, other_graph: DirectedGraph[NodeType]
-    ) -> DirectedGraph[Tuple[NodeType, NodeType]]:
+            self, other_graph: 'DirectedGraph[NodeType]'
+    ) -> 'DirectedGraph[Tuple[NodeType, NodeType]]':
         """
         Generates a new directed graph by making the cartesian product
         of both graphs, in the category theoretic sense of the term.
@@ -196,8 +204,8 @@ class DirectedGraph(Generic[NodeType], DiGraph, abc.MutableMapping):  # pylint: 
             in product(self.items(), other_graph.items())})
 
     def __add__(
-            self, other_graph: DirectedGraph[NodeType]
-    ) -> DirectedGraph[Tuple[bool, NodeType]]:
+            self, other_graph: 'DirectedGraph[NodeType]'
+    ) -> 'DirectedGraph[Tuple[bool, NodeType]]':
         """
         Generates a new directed graph by making the directed join of both
         graphs:
@@ -222,8 +230,8 @@ class DirectedGraph(Generic[NodeType], DiGraph, abc.MutableMapping):  # pylint: 
 
     def __matmul__(
             self,
-            other_graph: DirectedGraph[NodeType]
-    ) -> DirectedGraph[Tuple[NodeType, NodeType]]:
+            other_graph: 'DirectedGraph[NodeType]'
+    ) -> 'DirectedGraph[Tuple[NodeType, NodeType]]':
         """
         Generates a new directed graph by making the product of the graph in
         that:
@@ -247,8 +255,8 @@ class DirectedGraph(Generic[NodeType], DiGraph, abc.MutableMapping):  # pylint: 
             for key0, key1 in product(self, other_graph)})
 
     def __mul__(
-            self, other_graph: DirectedGraph[NodeType]
-    ) -> DirectedGraph[Tuple[NodeType, NodeType]]:
+            self, other_graph: 'DirectedGraph[NodeType]'
+    ) -> 'DirectedGraph[Tuple[NodeType, NodeType]]':
         """
         Generates a new directed graph by making the directed product of both
         graphs (lexicographic order)
@@ -267,7 +275,7 @@ class DirectedGraph(Generic[NodeType], DiGraph, abc.MutableMapping):  # pylint: 
 
     def remap_names(
             self, key_func: Callable[[Any], Any]
-    ) -> DirectedGraph[Any]:
+    ) -> 'DirectedGraph[Any]':
         """
         Remap the graph nodes to new names using a function key_func to
         generate the new names.
@@ -280,7 +288,7 @@ class DirectedGraph(Generic[NodeType], DiGraph, abc.MutableMapping):  # pylint: 
                 for value, labels in values.items()}
             for key, values in self.items()})
 
-    def integerify(self) -> DirectedGraph[int]:
+    def integerify(self) -> 'DirectedGraph[int]':
         """
         Remap the graph nodes to integers, starting from 0 in the order of
         access in the underlying dictionary
@@ -290,7 +298,7 @@ class DirectedGraph(Generic[NodeType], DiGraph, abc.MutableMapping):  # pylint: 
         remapping = {node: index for index, node in sorted_nodes}
         return self.remap_names(remapping.get)
 
-    def stringify(self) -> DirectedGraph[str]:
+    def stringify(self) -> 'DirectedGraph[str]':
         """
         Remap the graph nodes to strings generated from the
         hash code of each key
@@ -300,7 +308,7 @@ class DirectedGraph(Generic[NodeType], DiGraph, abc.MutableMapping):  # pylint: 
     def rand_prune(
             self, pruning_factor: float,
             random_generator: Optional[random.Random] = None
-    ) -> DirectedGraph[NodeType]:
+    ) -> 'DirectedGraph[NodeType]':
         """
         Randomly prune nodes out of the graph. The number of nodes pruned out
         of the graph is floor(pruning_factor * len(self)),
@@ -311,6 +319,7 @@ class DirectedGraph(Generic[NodeType], DiGraph, abc.MutableMapping):  # pylint: 
         nb_to_prune = int(np.floor(pruning_factor * len(self)))
 
         # Node sampler
+        #pylint: disable=unnecessary-lambda
         if random_generator is None:
             choice = lambda g: random.choice(g)
         else:
@@ -543,32 +552,6 @@ def generate_random_graph(
     return factory.graphs[idx]
 
 
-def sample(
-        graph: DirectedGraph[NodeType],
-        sample_vertices_size: int,
-        ranking: Callable[[DirectedGraph[NodeType]], Mapping[NodeType, float]],
-        rng: random.Random) -> DirectedGraph[NodeType]:
-    """
-    Sample a random subgraph of `graph` with respect to a probability
-    distribution `ranking` over the vertices.
-
-    Params:
-    - graph: Input graph
-    - sample_vertices_size: number of vertices to sample
-        (with replacement so actual number might be lower)
-    - ranking: probability distribution over the input graph vertices
-    - rng: Random generator
-
-    Returns:
-    A valid random subgraph
-
-    """
-    ranks = list(ranking(graph).items())
-    vertices, weights = zip(*ranks)
-    sampled_vertices = set(rng.choices(vertices, weights, k=int(sample_vertices_size)))
-    return graph.subgraph(sampled_vertices)
-
-
 def pagerank_sample(
         graph: DirectedGraph[NodeType],
         sample_vertices_size: int,
@@ -581,6 +564,7 @@ def pagerank_sample(
     Pagerank calculation: see `networkx.pagerank`
     NB: `kwargs are all passed to `networkx.pagerank`
     """
+    #pylint: disable=unnecessary-lambda
     return sample(
         graph, sample_vertices_size, lambda g: pagerank(g, **kwargs), rng)
 
@@ -617,18 +601,71 @@ def authorities_sample(
         graph, sample_vertices_size, lambda g: hits(g, **kwargs)[1], rng)
 
 
+def sample(
+        graph: DirectedGraph[NodeType],
+        sample_vertices_size: int,
+        ranking: Callable[[DirectedGraph[NodeType]], Mapping[NodeType, float]],
+        rng: random.Random,
+        with_edges=False) -> DirectedGraph[NodeType]:
+    """
+    Sample a random subgraph of `graph` with respect to a probability
+    distribution `ranking` over the vertices.
+
+    Params:
+    - graph: Input graph
+    - sample_vertices_size: number of vertices to sample
+        (with replacement so actual number might be lower)
+    - ranking: probability distribution over the input graph vertices
+    - rng: Random generator
+    - with_edges: Ensure that every returned vertex has an edge
+    NOTE: if sample_vertices_size is odd and with_edges=True,
+    number of returned edges will be sample_vertices_size-1
+    NOTE: warning print to be replaced with appropriate logging
+
+    Returns:
+    A valid random subgraph
+
+    """
+    if not with_edges:
+        ranks = list(ranking(graph).items())
+    else:
+        ranks = list(ranking(graph.edges).items())
+        # Check if sample_vertices_size is odd
+        if sample_vertices_size & 1:
+            warning_str = (f'sample_vertices_size {sample_vertices_size} is odd '
+            f'and will be rounded to floor even number {sample_vertices_size - 1}'
+            'when with_edges=True')
+            warnings.warn(str_color('W', warning_str), UserWarning)
+        sample_vertices_size //= 2
+
+    # NOTE: all vertices are returned every call. Not optimal. Can be kept in memory
+    # and sampled several times. Proposal to integrate into dataloader.
+    vertices, weights = zip(*ranks)
+
+    if not with_edges:
+        sampled_vertices = set(rng.choices(vertices, weights, k=int(sample_vertices_size)))
+    else:
+        sampled_vertices = rng.choices(vertices, weights, k=int(sample_vertices_size))
+        sampled_vertices = set([v for tpl in sampled_vertices for v in tpl])
+
+    return graph.subgraph(sampled_vertices)
+
+
 def uniform_sample(
         graph: DirectedGraph[NodeType],
         sample_vertices_size: int,
-        rng: random.Random) -> DirectedGraph[NodeType]:
+        rng: random.Random,
+        with_edges: bool=False) -> DirectedGraph[NodeType]:
     """
     Sample a random subgraph of `graph` with a uniform probability over vertices
-
+    Edges are returned.
     Details of parameters: see `sample`
+    NOTE: uniform sampler implies equal weights.
     """
-    n = len(graph)
+    weight = 1./len(graph)
     return sample(graph, sample_vertices_size,
-                  lambda G: {v: 1.0/n for v in G}, rng)
+                  lambda G: {v: weight for v in G}, rng, with_edges)
+
 
 def random_walk_vertex_sample(
         graph: DirectedGraph[NodeType],
@@ -639,6 +676,7 @@ def random_walk_vertex_sample(
         use_opposite: bool = False) -> DirectedGraph[NodeType]:
     """
     Random Walk graph vertex subsampling
+    Graph must be inverse-completed
 
     Params:
     - graph: the input graph
@@ -648,15 +686,19 @@ def random_walk_vertex_sample(
     - n_seeds: to start random walk on specified number of uniformly selected vertices
     - use_opposite: if True, randomly walk either direct or dual graph fairly
 
+    Number of returner nodes is always inferior to the number of iterations.
     Returns: a valid subgraph, where all edges existing between sampled vertices are kept
     """
-    if len(graph) == 0:
+    if len(graph) == 0 or n_seeds == 0:
         return DiGraph()
-    elif seeds is None:
+    if n_seeds * 2 < n_iter:
+        warning_str = (f'n_iter {n_iter} must be at least > 2 * n_seeds'
+            f' {2 * n_seeds} for consistent sampling results.')
+        warnings.warn(str_color('W', warning_str), UserWarning)
+    if seeds is None:
         sampled_vertices = list(rng.choices(list(graph), k=n_seeds))
     else:
         sampled_vertices = list(seeds)
-
     i = 0
     while i < n_iter:
         i += 1
@@ -665,7 +707,11 @@ def random_walk_vertex_sample(
         connected_vertices = list(graph.op[v] if use_op else graph[v])
         if connected_vertices:
             sampled_vertices.append(rng.choice(connected_vertices))
-    return graph.subgraph(sampled_vertices)
+    sampled_subg = graph.subgraph(sampled_vertices)
+    # Heuristic: subgraph edges must be at x2 n_seeds; if not, double n_iter and repeat
+    if len(sampled_subg.edges) >= n_seeds or n_iter > 10**6:
+        return sampled_subg
+    return random_walk_vertex_sample(graph, rng, n_iter * 2, seeds, n_seeds, use_opposite)
 
 
 def random_walk_edge_sample(
@@ -678,6 +724,10 @@ def random_walk_edge_sample(
         use_both_ends: bool = False) -> DirectedGraph[NodeType]:
     """
     Random Walk graph edge subsampling
+    NOTE: for large n_seeds equivalent for breath-first graph traversal
+    with maximal depth of 1 and maximal degree of connection 3.
+    NOTE: maximal degree of connection is not equivalent to graph diameter,
+    but can be assumed as diameter for simplicity.
 
     Params:
     - graph: the input graph
@@ -702,11 +752,10 @@ def random_walk_edge_sample(
     """
     if len(graph.edges) == 0:
         return DirectedGraph()
-    elif seeds is None:
+    if seeds is None:
         sampled_edges = list(rng.choices(list(graph.edges), k=n_seeds))
     else:
         sampled_edges = list(seeds)
-
     i = 0
     sampled_graph = DirectedGraph(sampled_edges)
     while i < n_iter:
@@ -716,7 +765,6 @@ def random_walk_edge_sample(
         use_src = use_both_ends and rng.randint(0, 1) # Flip a coin
         src = e[0] if use_src else e[1]
         gview = graph.op if use_op else graph
-
         compatible_edges = [
             (dst, {}) for dst in gview[src] if not gview[src][dst]
         ] + [
@@ -732,13 +780,15 @@ def random_walk_edge_sample(
 
 
 def n_hop_sample(
-        graph: DiGraph[NodeType],
+        graph: 'DiGraph[NodeType]',
         n_hops: int,
         seeds: Optional[Iterable[ArrowType]] = None,
         n_seeds: int = 1,
-        rng: Optional[random.Random] = None) -> DiGraph[NodeType]:
+        rng: Optional[random.Random] = None) -> 'DiGraph[NodeType]':
     """
-    N-hop sampling from random or specified locations
+    N-hop sampling from random or specified locations.
+    Only samples in straight edge direction.
+    No control over length of returned graph
 
     Params:
     - graph: the input graph
@@ -751,16 +801,102 @@ def n_hop_sample(
     """
     if len(graph) == 0 or n_hops <= 0:
         return DiGraph()
-    elif seeds is None:
+    if seeds is None:
         if rng is None:
             rng = random.Random()
         sampled_vertices = set(rng.choices(list(graph), k=n_seeds))
     else:
         sampled_vertices = set(seeds)
-
     for _ in range(1, n_hops):  # Seed sampling is considered 1st hop
         visited_vertices = set()
         for v in sampled_vertices:
             visited_vertices.update(list(graph[v]))
         sampled_vertices |= visited_vertices
     return graph.subgraph(sampled_vertices)
+
+
+def clean_selfloops(
+    graph: DirectedGraph[NodeType],
+    clean_edges: bool=True,
+    clean_isolate_nodes: bool=True):
+    """Inspect and clean graph self-loops.
+    clean_edges=True will remove edges, but isolates nodes
+    would possibly be created.
+    It's recommended to keep clean_isolate_nodes=True
+    """
+    selfloop_edges = list(nx.selfloop_edges(graph))
+    print(f'\nFollowing {len(selfloop_edges)} selfloop edge(s) are found:\n{selfloop_edges}')
+    if clean_edges:
+        graph.remove_edges_from(selfloop_edges)
+        print(f'{len(selfloop_edges)} selfloop edges are removed.')
+    if clean_isolate_nodes:
+        clean_isolates(graph)
+
+
+def clean_isolates(
+    graph: DirectedGraph[NodeType],
+    clean: bool=True):
+    """Clean nodes with zero connections (either in- or outbound)."""
+    isolates = list(nx.isolates(graph))
+    print(f'Following {len(isolates)} isolate(s) are found:\n{isolates}')
+    graph.remove_nodes_from(list(nx.isolates(graph)))
+    if clean:
+        graph.remove_nodes_from(isolates)
+        print(f'{len(isolates)} isolates are removed.')
+
+
+def init_relation_vectors(relation2id: dict) -> dict:
+    """one-hot representation of entities
+    equivalent to label_universe required by TrainableDecisionCatModel
+    TODO: Parametrize encoding type. OHE could be one of possible encoding schemes.
+    In current implementation, other encodings like embedding vectors are not considered.
+    """
+    nb_relations = len(relation2id)
+    return {i: one_hot(i, nb_relations) for i in relation2id.values()}
+
+
+def augment_graph(graph: DirectedGraph, revers_rels: dict):
+    """revers_rels: dict of corresponding opposite relations.
+    rels_revers format example: {1: 1, 2: 4, 3: 13, 4: None}
+    where 1, 2 are from the existing label universe
+    13 is created. None means there is not opposite.
+    If opposite relations are created, label_universe must be updated.
+    It's recommended to create revers_rels dictionary
+    with create_revers_rels method.
+    --------------
+    Only for Directional, not multirelational graphs (single relation per edge).
+    Edge data are created in the format {id: None}.
+    If there are custom edge data different from None,
+    another function must be created.
+    """
+    for src, dst, rel in graph.edges(data=True):
+        rel_id = list(rel.keys())[0]
+        revers_id = revers_rels.get(rel_id)
+        if (revers_id and not graph.has_edge(dst, src)):
+            graph.add_edge(dst, src)
+            graph[dst][src].update({revers_id: None})
+
+
+def create_revers_rels(revers_rels_str: dict, relation2id: dict) -> 'list(dict, dict, dict)':
+    """Create new relation2id and relation_id2vec dictionaries, as well as
+    revers_rels dictionary, that should be passed to augment_graph function.
+    """
+    relation2id_augmented = {}
+    relation_id2vec_augmented = {}
+    revers_rels = {}
+    offset = len(relation2id)
+    i = 0
+    for rel, revers in revers_rels_str.items():
+        rel_id = relation2id[rel]
+        relation2id_augmented[rel] = rel_id
+        if not revers:
+            continue
+        if relation2id.get(revers):
+            revers_id = relation2id[revers]
+        else:
+            revers_id = i + offset
+            i += 1
+        revers_rels[rel_id] = revers_id
+        relation2id_augmented[revers] = revers_id
+    relation_id2vec_augmented = init_relation_vectors(relation2id_augmented)
+    return [relation2id_augmented, relation_id2vec_augmented, revers_rels]

@@ -8,7 +8,7 @@ Created on Tue Mar 26 11:29:23 2019
 
 Utilities for graphs with composite arrows
 """
-from __future__ import annotations
+# from __future__ import annotations
 from typing import (
     TypeVar, Generic, Optional, Union, Iterable, Tuple, Iterator, Callable)
 from collections import abc
@@ -49,9 +49,11 @@ class CompositeArrow(Generic[NodeType, ArrowType], abc.Sequence):  # pylint: dis
             self._arrows = tuple(arrows)  # type: ignore
 
         if not len(self.nodes) == len(self.arrows) + 1:
+            print(f'nodes: {nodes}')
+            print(f'arrows: {arrows}')
             raise ValueError("nodes and arrows length don't match")
 
-    def derive(self) -> CompositeArrow[ArrowType, NodeType]:
+    def derive(self) -> 'CompositeArrow[ArrowType, NodeType]':
         """
         Return the arrow's inside, forfeiting first and last node.
         """
@@ -60,7 +62,7 @@ class CompositeArrow(Generic[NodeType, ArrowType], abc.Sequence):  # pylint: dis
 
     def suspend(
             self, source: ArrowType, target: ArrowType
-        ) -> CompositeArrow[ArrowType, NodeType]:
+        ) -> 'CompositeArrow[ArrowType, NodeType]':
         """
         Return an arrow whose derived is given arrow, with provided source
         and target
@@ -86,7 +88,7 @@ class CompositeArrow(Generic[NodeType, ArrowType], abc.Sequence):  # pylint: dis
             self, index: Union[int, slice]
         ) -> Union[
             NodeType, Tuple[NodeType, ...],
-            CompositeArrow[NodeType, ArrowType]]:
+            'CompositeArrow[NodeType, ArrowType]']:
         """
         Access nodes and subcomposites.
             - Accessing an integer index will access the node at the given
@@ -137,7 +139,7 @@ class CompositeArrow(Generic[NodeType, ArrowType], abc.Sequence):  # pylint: dis
         """
         return len(self.arrows)
 
-    def __eq__(self, arrow: CompositeArrow[NodeType, ArrowType]) -> bool:  # type: ignore
+    def __eq__(self, arrow: 'CompositeArrow[NodeType, ArrowType]') -> bool:  # type: ignore
         """
         Test wether two composite arrows are equals, i.e:
             - they have the same nodes in the same order
@@ -146,15 +148,15 @@ class CompositeArrow(Generic[NodeType, ArrowType], abc.Sequence):  # pylint: dis
         return self.nodes == arrow.nodes and self.arrows == arrow.arrows
 
     @property
-    def op(self) -> CompositeArrow[NodeType, ArrowType]:
+    def op(self) -> 'CompositeArrow[NodeType, ArrowType]':
         """
         Return arrow in reverse direction
         """
         return CompositeArrow(self.nodes[::-1], self.arrows[::-1])
 
     def comp(
-            self, arrow: CompositeArrow[NodeType, ArrowType],
-            overlap: int) -> CompositeArrow[NodeType, ArrowType]:
+            self, arrow: 'CompositeArrow[NodeType, ArrowType]',
+            overlap: int) -> 'CompositeArrow[NodeType, ArrowType]':
         """
         Return composite with n overlapping arrows in the middle
         if n negative, or all overlapping from n-th position of first arrow
@@ -176,8 +178,8 @@ class CompositeArrow(Generic[NodeType, ArrowType], abc.Sequence):  # pylint: dis
         return CompositeArrow(nodes, arrows)
 
     def __add__(
-            self, arrow: CompositeArrow[NodeType, ArrowType]
-        ) -> CompositeArrow[NodeType, ArrowType]:
+            self, arrow: 'CompositeArrow[NodeType, ArrowType]'
+        ) -> 'CompositeArrow[NodeType, ArrowType]':
         """
         Compose 2 arrows together. The last node of the first must be the same
         as the first node of the second.
@@ -192,8 +194,8 @@ class CompositeArrow(Generic[NodeType, ArrowType], abc.Sequence):  # pylint: dis
         return CompositeArrow(nodes, arrows)
 
     def __matmul__(
-            self, arrow: CompositeArrow[NodeType, ArrowType]
-        ) -> CompositeArrow[NodeType, ArrowType]:
+            self, arrow: 'CompositeArrow[NodeType, ArrowType]'
+        ) -> 'CompositeArrow[NodeType, ArrowType]':
         """
         Extend 2 composites which match on:
             - the first composite with its first arrow removed
@@ -230,11 +232,11 @@ class CompositionGraph(Generic[NodeType, ArrowType, AlgebraType], abc.Mapping): 
             self,
             comp: Callable[
                 [
-                    CompositionGraph[NodeType, ArrowType, AlgebraType],
-                    CompositeArrow[NodeType, ArrowType]],
+                    'CompositionGraph[NodeType, ArrowType, AlgebraType]',
+                    'CompositeArrow[NodeType, ArrowType]'],
                 AlgebraType],
             arrows: Iterable[
-                CompositeArrow[NodeType, ArrowType]] = iter(())) -> None:
+                'CompositeArrow[NodeType, ArrowType]'] = iter(())) -> None:
         """
         Initialize a new composition graph.
         """
@@ -262,6 +264,7 @@ class CompositionGraph(Generic[NodeType, ArrowType, AlgebraType], abc.Mapping): 
     def add(self, arrow: CompositeArrow[NodeType, ArrowType]) -> None:
         """
         Add the given composite arrow to the composition graph
+        NOTE: manage empty arrows
         """
         if not arrow:
             raise ValueError("Can only add arrows of length at least 1")
@@ -344,7 +347,6 @@ class CompositionGraph(Generic[NodeType, ArrowType, AlgebraType], abc.Mapping): 
                 self.arrows(node, None, arrow_length_range=arrow_length_range)
                 for node in self.graph.nodes
             ))
-
         return iter(())
 
     def __iter__(self) -> Iterator[CompositeArrow[NodeType, ArrowType]]:

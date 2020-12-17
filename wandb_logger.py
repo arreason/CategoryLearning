@@ -6,6 +6,8 @@ from typing import Any
 from collections import defaultdict
 from itertools import chain
 import wandb
+import os
+import torch
 
 from catlearn.tensor_utils import Tsor
 from catlearn.composition_graph import NodeType, ArrowType, DirectedGraph
@@ -24,11 +26,10 @@ def log_results(
     """
         Log results from a training step
     """
-
     # sanity check: info_to_log shouldn't override default logs
-    if {
-            'nb_labels', 'total_match_cost', 'total_causality_cost',
-            'cost_per_label', 'arrow_numbers'} and info_to_log:
+    std_log_keys = ('nb_labels', 'total_match_cost', 'total_causality_cost',
+            'cost_per_label', 'arrow_numbers')
+    if info_to_log and not all(info_key not in std_log_keys for info_key in info_to_log):
         raise ValueError(
             'cannot provide any of the default keywords to log.'
             'Default keywords are:\n'
@@ -69,13 +70,25 @@ def log_results(
         **info_to_log
     })
 
+
 def save_params(
     model: TrainableDecisionCatModel):
     """
     Save relation and scoring model parameters
     for a trainable decision cat model
     """
-    wandb.log({
-        "params": {
-            name: Tsor(param) for (name, param) in model.named_parameters()},
-    })
+    for name, param in model.named_parameters():
+        wandb.log({
+            "params": {
+                name: torch.FloatTensor(param) for (name, param) in model.named_parameters()}
+        })
+
+
+def save_file(file_path: str):
+    """Upload file to wandb run session"""
+    # Convert if Path object is passed
+    file_path = str(file_path)
+    if file_path and os.path.isfile(file_path):
+        wandb.save(file_path)
+    else:
+        print(f'Wrong path: {file_path}')

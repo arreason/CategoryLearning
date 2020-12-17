@@ -3,10 +3,11 @@ This file introduces the factories for creating the necessary cost functions
 for the categorical model
 """
 
-from __future__ import annotations
+# from __future__ import annotations
 from itertools import chain
 from types import MappingProxyType
-from typing import Any, Callable, IO, Iterable, Mapping, Tuple, Union, Optional
+
+from typing import IO, Iterable, Mapping, Tuple, Union, Optional
 
 import torch
 from torch.optim import Optimizer
@@ -38,7 +39,6 @@ class ScoringModel(AbstractModel):
 
 
 # pylint: enable=missing-docstring
-
 class DecisionCatModel:
     """
     A class to abstract a decision categorical model
@@ -167,14 +167,11 @@ class DecisionCatModel:
         torch.save(self, flike)
 
     @staticmethod
-    def load(flike: Union[str, IO]) -> DecisionCatModel:
+    def load(flike: Union[str, IO]) -> 'DecisionCatModel':
         """
         Load a model from a given location (path or file-like object)
         """
         return torch.load(flike)
-
-
-
 
 
 class TrainableDecisionCatModel(DecisionCatModel, AbstractModel):
@@ -231,7 +228,7 @@ class TrainableDecisionCatModel(DecisionCatModel, AbstractModel):
         """
         return self.algebra.flatdim
 
-    def named_parameters(self, recurse: bool=True) -> Iterable[str, Tsor]:
+    def named_parameters(self, recurse: bool=True) -> 'Iterable[str, Tsor]':
         """
         returns an iterator over parameters of the model
         """
@@ -285,6 +282,8 @@ class TrainableDecisionCatModel(DecisionCatModel, AbstractModel):
                 RelationCache[NodeType, ArrowType], DirectedGraph[NodeType]]:
         """
         perform one training step on a batch of tuples
+        NOTE: needs more detailed docstring. Describe requirements and best practices
+        for each variable used during the training.
         """
         # backprop on the batch
         cost, cache, matched = self.cost(
@@ -310,7 +309,7 @@ class TrainableDecisionCatModel(DecisionCatModel, AbstractModel):
         torch.save(self, flike)
 
     @staticmethod
-    def load(flike: Union[str, IO]) -> TrainableDecisionCatModel:
+    def load(flike: Union[str, IO]) -> 'TrainableDecisionCatModel':
         """
         Load a model from a given location (path or file-like object)
         """

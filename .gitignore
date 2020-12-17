@@ -6,6 +6,10 @@ __pycache__/
 # C extensions
 *.so
 
+# Local log files
+log*/
+wandb/
+
 # Distribution / packaging
 .Python
 build/
@@ -24,6 +28,13 @@ wheels/
 .installed.cfg
 *.egg
 MANIFEST
+
+# IDE settings
+.VSCodeCounter/
+.vscode
+
+# Debug
+debug/
 
 # PyInstaller
 #  Usually these files are written by a python script from a template
