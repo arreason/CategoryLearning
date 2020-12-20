@@ -553,6 +553,12 @@ class TestSubgraphSampling:
         return request.param
 
     @staticmethod
+    @pytest.fixture(params=[0, 1, 4])
+    def max_degree(request: Any) -> int:
+        """ Max degree allowed in sampled graph """
+        return request.param
+
+    @staticmethod
     def test_sample(graph, rng):
         """ Test sample respect a simple probability distribution: only first k nodes """
         firsts = frozenset(list(graph)[:5])
@@ -620,20 +626,21 @@ class TestSubgraphSampling:
         assert 1 <= len(sg) <= n_iter + 1 # 1 seed
 
     @staticmethod
-    def test_random_walk_edge(graph, rng, n_iter, n_seeds):
+    def test_random_walk_edge(graph, rng, n_iter, n_seeds, max_degree):
         """ Sanity checks on random walk over edges sampler """
-        sg = random_walk_edge_sample(graph, rng, n_iter, n_seeds=n_seeds)
+        sg = random_walk_edge_sample(graph, rng, n_iter, n_seeds=n_seeds, max_degree=max_degree)
         assert 0 <= len(sg.edges) <= n_iter + n_seeds
         # Assert we have at most n_seeds roots
         isRoot = lambda v: frozenset() <= sg.over(v) <= frozenset(v)
         assert 0 <= sum(1 for v in sg if isRoot(v)) <= n_seeds
 
     @staticmethod
-    def test_random_walk_edge_use_all(graph, rng, n_iter, n_seeds):
+    def test_random_walk_edge_use_all(graph, rng, n_iter, n_seeds, max_degree):
         """ Sanity checks on random walk over edges sampler """
         sg = random_walk_edge_sample(
             graph, rng, n_iter, n_seeds=n_seeds,
-            use_opposite=True, use_both_ends=True)
+            use_opposite=True, use_both_ends=True,
+            max_degree=max_degree)
         assert 0 <= len(sg.edges) <= n_iter + n_seeds
 
     @staticmethod

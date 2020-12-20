@@ -721,7 +721,8 @@ def random_walk_edge_sample(
         seeds: Optional[Iterable[ArrowType]] = None,
         n_seeds: int = 1,
         use_opposite: bool = False,
-        use_both_ends: bool = False) -> DirectedGraph[NodeType]:
+        use_both_ends: bool = False,
+        max_degree: int = 0) -> DirectedGraph[NodeType]:
     """
     Random Walk graph edge subsampling
     NOTE: for large n_seeds equivalent for breath-first graph traversal
@@ -737,6 +738,7 @@ def random_walk_edge_sample(
     - n_seeds: to start random walk on specified number of uniformly selected vertices
     - use_opposite: if True, randomly walk either direct or dual graph fairly
     - use_both_ends: if True, randomly select either end of sampled edges for growing the walk
+    - max_degree: If strictly positive, the maximum allowed degree (in and out) of the subgraph
 
     Returns: a valid subgraph
 
@@ -750,6 +752,10 @@ def random_walk_edge_sample(
     * use_opposite=True, use_both_ends=True:
       -> candidates are 2->3, 5->2, 1->4 and 0->1
     """
+    def get_degree_safe(graph, node, in_degree):
+        degrees = graph.in_degree([node]) if in_degree else graph.out_degree([node])
+        return dict(degrees).get(node, 0)  # thank you networkx...
+
     if len(graph.edges) == 0:
         return DirectedGraph()
     if seeds is None:
@@ -766,16 +772,16 @@ def random_walk_edge_sample(
         src = e[0] if use_src else e[1]
         gview = graph.op if use_op else graph
         compatible_edges = [
-            (dst, {}) for dst in gview[src] if not gview[src][dst]
-        ] + [
-            (dst, {k: v}) for dst in gview[src] for k,v in gview[src][dst].items()
-        ]
+            (dst, gview[src][dst]) for dst in gview[src]]
         if compatible_edges:
             dst, labels = rng.choice(compatible_edges)
             if use_op:
-                sampled_graph[dst] = {src: labels}
-            else:
-                sampled_graph[src] = {dst: labels}
+                src, dst = dst, src
+            if (max_degree <= 0 or
+                (get_degree_safe(sampled_graph, src, in_degree=False) < max_degree
+                 and get_degree_safe(sampled_graph, dst, in_degree=True) < max_degree)):
+                sampled_edges.append((src, dst))
+                sampled_graph.add_edge(src, dst, **labels)
     return sampled_graph
 
 
