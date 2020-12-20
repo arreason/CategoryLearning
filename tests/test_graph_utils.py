@@ -576,8 +576,8 @@ class TestSubgraphSampling:
         assert all(v in graph for v in sg)
 
     # Sometimes the algorithm does not converge
-    @pytest.mark.flaky(reruns=3)
     @staticmethod
+    @pytest.mark.flaky(reruns=3)
     def test_pagerank(graph, rng):
         """ Sanity checks on pagerank sampler """
         n_vertices = max(1, len(graph) - 4)
@@ -585,8 +585,8 @@ class TestSubgraphSampling:
         assert 1 <= len(sg) <= n_vertices
 
     # Sometimes the algorithm does not converge
-    @pytest.mark.flaky(reruns=3)
     @staticmethod
+    @pytest.mark.flaky(reruns=3)
     def test_hubs(graph, rng):
         """ Sanity checks on hubs sampler """
         n_vertices = max(1, len(graph) - 4)
@@ -594,8 +594,8 @@ class TestSubgraphSampling:
         assert 1 <= len(sg) <= n_vertices
 
     # Sometimes the algorithm does not converge
-    @pytest.mark.flaky(reruns=3)
     @staticmethod
+    @pytest.mark.flaky(reruns=3)
     def test_authorities(graph, rng):
         """ Sanity checks on authorities sampler """
         n_vertices = max(1, len(graph) - 4)
@@ -654,3 +654,122 @@ class TestSubgraphSampling:
         """ Sanity checks on n_hop sampler """
         sg = n_hop_sample(graph, n_hops, n_seeds=n_seeds, rng=rng)
         assert all(v in graph for v in sg)
+
+    @staticmethod
+    def test_random_walk_edge_star_pattern(rng, n_iter, max_degree):
+        """ Test subsampling of {1, k} -> 0 and then 0 -> {1, k} """
+        if max_degree <= 0:
+            max_degree = 10
+        graph = DirectedGraph()
+        for v in range(1, max_degree * 2):
+            graph.add_edge(v, 0)
+
+        subgraph = random_walk_edge_sample(
+            graph, rng, n_iter, n_seeds=1,
+            use_opposite=False, use_both_ends=False,
+            max_degree=max_degree)
+        assert len(subgraph.edges) == 1  # only the seed
+
+        subgraph = random_walk_edge_sample(
+            graph, rng, n_iter, n_seeds=1,
+            use_opposite=False, use_both_ends=True,
+            max_degree=max_degree)
+        assert len(subgraph.edges) == 1  # only the seed
+
+        # Here we activate matching of edges *->0
+        # => we can sample almost all the graph
+        subgraph = random_walk_edge_sample(
+            graph, rng, n_iter, n_seeds=1,
+            use_opposite=True, use_both_ends=False,
+            max_degree=max_degree)
+        assert len(subgraph.edges) == min(max_degree, n_iter)
+
+    @staticmethod
+    @pytest.fixture(params=[2, 10])
+    def chain_length(request: Any) -> int:
+        """ Length of the chain to generate """
+        return request.param
+
+    @staticmethod
+    def test_random_walk_edge_chain_pattern(rng, chain_length):
+        """ Test subsampling a chain sub-graph """
+        n_iter = max(20, 100 * chain_length)
+        multiplier = 4
+        graph = DirectedGraph()
+        for v in range(chain_length):
+            for i in range(multiplier):
+                for j in range(multiplier):
+                    graph.add_edge((v, i), (v+1, j))
+
+        subgraph = random_walk_edge_sample(
+            graph, rng, n_iter, n_seeds=1,  # any starting point in the chain
+            use_opposite=True, use_both_ends=True,
+            max_degree=1)
+        # Assert graph is a chain of expected length
+        assert len(subgraph.edges) == chain_length
+        assert(0 <= d <= 1 for _, d in subgraph.out_degree())
+        assert(0 <= d <= 1 for _, d in subgraph.in_degree())
+
+        # Find vertices - sorting here should retrieve the chaining
+        vertices = sorted(list(subgraph.nodes))
+        assert all(v in set((i, m) for m in range(multiplier))
+                   for i, v in enumerate(vertices))
+
+        # Inspect linkage
+        assert all(e in subgraph.edges for e in zip(vertices, vertices[1:]))
+
+    @staticmethod
+    def test_random_walk_edge_functional_pattern(rng):
+        """
+        Minimal test case for the different sampling head and direction
+
+        Graph to use should enable precise testing of the options.
+
+        4 -> 0 -> 1 -> 2
+        5 <- 0    1 <- 3
+        """
+        n_iter = 100  # override fixture to stabilize the tests
+
+        graph = DirectedGraph()
+        graph.add_edge(0, 1)
+        graph.add_edge(1, 2)
+        graph.add_edge(3, 1)
+        graph.add_edge(4, 0)
+        graph.add_edge(0, 5)
+
+        # Step 1 - use_opposite=False, use_both_ends=False
+        # From (0, 1), we should sample only edges starting from 1
+        expected_subgraph = DirectedGraph()
+        expected_subgraph.add_edge(0, 1)
+        expected_subgraph.add_edge(1, 2)
+        subgraph = random_walk_edge_sample(
+            graph, rng, n_iter, seeds=[(0,1)],
+            use_opposite=False, use_both_ends=False)
+        assert subgraph == expected_subgraph
+
+        # Step 2 - use_opposite=False, use_both_ends=True
+        # From (0, 1), we should sample only edges starting from 0 or 1
+        expected_subgraph = DirectedGraph()
+        expected_subgraph.add_edge(0, 1)
+        expected_subgraph.add_edge(1, 2)
+        expected_subgraph.add_edge(0, 5)
+        subgraph = random_walk_edge_sample(
+            graph, rng, n_iter, seeds=[(0,1)],
+            use_opposite=False, use_both_ends=True)
+        assert subgraph == expected_subgraph
+
+        # Step 3 - use_opposite=True, use_both_ends=False
+        expected_subgraph = DirectedGraph()
+        expected_subgraph.add_edge(0, 1)
+        expected_subgraph.add_edge(1, 2)
+        expected_subgraph.add_edge(3, 1)
+        subgraph = random_walk_edge_sample(
+            graph, rng, n_iter, seeds=[(0,1)],
+            use_opposite=True, use_both_ends=False)
+        assert subgraph == expected_subgraph
+
+        # Step 4 - use_opposite=True, use_both_ends=True => catch all
+        subgraph = random_walk_edge_sample(
+            graph, rng, n_iter, seeds=[(0,1)],
+            use_opposite=True, use_both_ends=True)
+        assert subgraph == graph
