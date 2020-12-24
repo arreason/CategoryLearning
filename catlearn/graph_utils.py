@@ -782,13 +782,18 @@ def random_walk_edge_sample(
 def n_hop_sample(
         graph: 'DiGraph[NodeType]',
         n_hops: int,
-        seeds: Optional[Iterable[ArrowType]] = None,
+        seeds = None,
         n_seeds: int = 1,
-        rng: Optional[random.Random] = None) -> 'DiGraph[NodeType]':
+        rng: random.Random = random.Random(),
+        max_degree = 3
+        ) -> 'DiGraph[NodeType]':
     """
     N-hop sampling from random or specified locations.
     Only samples in straight edge direction.
     No control over length of returned graph
+    NOTE: n_hop only extends for outbound connections
+    Graph must be inverse completed for this to function well
+    E.g. a -> c <=> d, starting from c it's only possible to go to d
 
     Params:
     - graph: the input graph
@@ -802,17 +807,27 @@ def n_hop_sample(
     if len(graph) == 0 or n_hops <= 0:
         return DiGraph()
     if seeds is None:
-        if rng is None:
-            rng = random.Random()
-        sampled_vertices = set(rng.choices(list(graph), k=n_seeds))
+        to_visit = rng.sample(list(graph.nodes), k=n_seeds)
     else:
-        sampled_vertices = set(seeds)
-    for _ in range(1, n_hops):  # Seed sampling is considered 1st hop
-        visited_vertices = set()
-        for v in sampled_vertices:
-            visited_vertices.update(list(graph[v]))
-        sampled_vertices |= visited_vertices
-    return graph.subgraph(sampled_vertices)
+        to_visit = seeds
+    visited = set()
+    sampled = to_visit.copy()
+    while True:
+        hop_neighbors = []
+        while to_visit:
+            node = to_visit.pop()
+            if node in visited:
+                break
+            neighbors = list(nx.neighbors(graph, node))
+            if len(neighbors) > max_degree:
+                neighbors = rng.sample(neighbors, k=max_degree)
+            hop_neighbors += neighbors
+            visited.add(node)
+        sampled += hop_neighbors
+        n_hops -= 1
+        if not n_hops:
+            return graph.subgraph(sampled)
+        to_visit += hop_neighbors 
 
 
 def clean_selfloops(
