@@ -513,15 +513,16 @@ class RelationCache(
 
         if labels is None:
             options = {
-                (arr[0], arr[-1], FrozenSet((label,))): kl_match(
-                    self[arr], self.label_universe[label])
+                (arr[0], arr[-1], frozenset((label,))): float(kl_match(
+                    self[arr], self.label_universe[label]))
                 for (arr, label) in product(arrows, self.label_universe)}
         else:
             options = {
-                (arr[0], arr[-1], labels): sum(
+                (arr[0], arr[-1], frozenset(labels)): float(sum(
                     kl_match(self[arr], self.label_universe[label])
-                    for label in labels)
+                    for label in labels))
                 for arr in arrows}
 
-        return OrderedDict[Tuple[NodeType, NodeType, FrozenSet(ArrowType)]](
-            sorted(options.items(), options.get))
+        return OrderedDict[
+            Tuple[NodeType, NodeType, FrozenSet[ArrowType]], float,
+        ](sorted(options.items(), key=lambda item: item[1]))

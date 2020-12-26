@@ -2,21 +2,111 @@
 A simple module to initialize wandb and define log functionalities for catlearn
  models
 """
-from typing import Any, Tuple, Optional, OrderedDict, FrozenSet
-from collections import defaultdict
-from itertools import chain
-import wandb
 import os
+from typing import Any, Tuple, Optional, FrozenSet, List
+from collections import defaultdict
+from itertools import chain, zip_longest
+import math
+
+import wandb
 import torch
 
 from catlearn.tensor_utils import Tsor
-from catlearn.composition_graph import NodeType, ArrowType, DirectedGraph
+from catlearn.composition_graph import (
+    NodeType, ArrowType, DirectedGraph, CompositeArrow,
+)
 from catlearn.relation_cache import RelationCache
 from catlearn.categorical_model import TrainableDecisionCatModel
 
 
 wandb.login()
 wandb.init(project='catlearn', config={})
+
+
+def compute_kge_metrics(
+    cache: RelationCache[NodeType, ArrowType],
+    triplets: List[Tuple[
+        Tuple[
+            Optional[NodeType], Optional[NodeType],
+            Optional[FrozenSet[ArrowType]]],
+        Tuple[NodeType, NodeType, FrozenSet[ArrowType]]]]) -> None:
+    """
+    Compute KGE metrics for a list of tuples containing:
+    - a request triplet of the form (src, tar, label) where any of
+        the 3 values may be None, meaning we want to find a match for it
+    - an evaluation triplet of the form (src, tar, label) with the actual values
+    """
+    # compute ranks for each triplet
+    ranks = {
+        triplet: list(cache.sort_relations(*triplet[1]))
+        for triplet in triplets
+    }
+
+    sum_ranks = 0
+    sum_inverse_ranks = 0
+    nonhits_at_n = defaultdict(lambda: 0.)
+    for triplet, rank_list in ranks.items():
+        triplet_rank = rank_list.index(triplet[0])
+        sum_ranks += triplet_rank + 1.
+        sum_inverse_ranks += 1./(triplet_rank + 1.)
+        for valid_rank in range(triplet_rank):
+            nonhits_at_n[valid_rank] += 1.
+
+    nb_triplets = len(triplets)
+    mean_rank = sum_ranks/nb_triplets
+    mean_reciprocal_ranks = sum_inverse_ranks/nb_triplets
+    hits_at_n = [
+        1. - nonhits_at_n[rank]/nb_triplets
+        for rank in range(max(nonhits_at_n, default=0) + 1)]
+
+    return {
+        'mean_rank': mean_rank,
+        'mean_reciprocal_ranks': mean_reciprocal_ranks,
+        'hits_at_n': hits_at_n,
+    }
+
+
+def log_kge_metrics(
+    cache: RelationCache[NodeType, ArrowType],
+    triplets: List[Tuple[
+            Optional[NodeType], Optional[NodeType],
+            Optional[FrozenSet[ArrowType]]]],
+):
+    """
+    Log KGE metrics for given triplets:
+    remove source, then target and make prediction.
+    Average results of both
+    """
+    sourceless_triplets = (
+        (None, target, frozenset([label]))
+        for (source, target, label) in triplets
+    )
+    targetless_triplets = (
+        (source, None, frozenset([label]))
+        for (source, target, label) in triplets
+    )
+    full_triplets = [
+        (source, target, frozenset([label]))
+        for (source, target, label) in triplets
+    ]
+    source_kge_metrics = compute_kge_metrics(
+        cache, list(zip(full_triplets, sourceless_triplets)),
+    )
+    target_kge_metrics = compute_kge_metrics(
+        cache, list(zip(full_triplets, targetless_triplets)),
+    )
+    average_metrics = {
+        'mean_rank': (
+            source_kge_metrics['mean_rank']
+            + target_kge_metrics['mean_rank'])/2.,
+        'mean_reciprocal_ranks': (
+            source_kge_metrics['mean_reciprocal_ranks']
+            + target_kge_metrics['mean_reciprocal_ranks'])/2.,
+        'hits_at_n': [sum(tup)/len(tup) for tup in zip_longest(
+            source_kge_metrics['hits_at_n'], target_kge_metrics['hits_at_n'],
+            fillvalue=0.)]
+    }
+    wandb.log(average_metrics)
 
 
 def log_results(
@@ -68,47 +158,6 @@ def log_results(
         'cost_per_label': cost_per_label,
         'arrow_numbers': arrows,
         **info_to_log
-    })
-
-
-def log_KGE_metrics(
-    cache: RelationCache[NodeType, ArrowType],
-    triplets: List[Tuple[
-        Tuple[
-            Optional[NodeType], Optional[NodeType],
-            Optional[FrozenSet[ArrowType]]],
-        Tuple[NodeType, NodeType, FrozenSet[ArrowType]]]]) -> None:
-    """
-    Compute KGE metrics for a list of tuples containing:
-    - a request triplet of the form (src, tar, label) where any of
-        the 3 values may be None, meaning we want to find a match for it
-    - an evaluation triplet of the form (src, tar, label) with the actual values
-    """
-    # compute ranks for each triplet
-    ranks = {
-        triplet: list(cache.sort_relations(*triplet)) for triplet in triplets}
-
-    sum_ranks = 0
-    sum_inverse_ranks = 0
-    nonhits_at_n = defaultdict(lambda: 0.)
-    for triplet, rank_list in ranks.items():
-        triplet_rank = rank_list.index(triplet)
-        sum_ranks += triplet_rank + 1.
-        sum_inverse_ranks += 1./(triplet_rank + 1.)
-        for valid_rank in range(triplet_rank):
-            nonhits_at_n[valid_rank] += 1.
-
-    nb_triplets = len(triplets)
-    mean_rank = sum_ranks/nb_triplets
-    mean_reciprocal_ranks = sum_inverse_ranks/nb_triplets
-    hits_at_n = [
-        1. - nonhits_at_n[rank]/nb_triplets
-        for rank in range(max(nonhits_at_n) + 1)]
-
-    wandb.log({
-        "mean_rank": mean_rank,
-        "mean_reciprocal_ranks": mean_reciprocal_ranks,
-        "hits_at_n": hits_at_n,
     })
 
 
