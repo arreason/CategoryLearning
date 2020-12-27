@@ -194,7 +194,7 @@ class RelationCache(
         self._graph = CompositionGraph[NodeType, ArrowType, Tsor](
             self._graph_comp(), ())
 
-        # register wraping attributestriplets = 
+        # register wraping attributes
         self.add = self._graph.add
         self.graph = self._graph.graph
 
