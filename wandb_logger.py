@@ -22,6 +22,11 @@ from catlearn.categorical_model import TrainableDecisionCatModel
 wandb.login()
 wandb.init(project='catlearn', config={})
 
+def safe_list_get(l: list, value: any, default: any):
+  try:
+    return l.index(value)
+  except ValueError:
+    return default
 
 def compute_kge_metrics(
     cache: RelationCache[NodeType, ArrowType],
@@ -45,14 +50,18 @@ def compute_kge_metrics(
     sum_ranks = 0
     sum_inverse_ranks = 0
     nonhits_at_n = defaultdict(lambda: 0.)
+    tripl, rnk_ll = list(ranks.items())[0]
     for triplet, rank_list in ranks.items():
-        triplet_rank = rank_list.index(triplet[0])
+        nb_triplets = len(triplets)
+        #         triplet_rank = rank_list.index(triplet[0])
+        # NOTE: below is a 'PLUG' solution to keep computation
+        # as it takes the worst case if the right tirplet is not returned in the list
+        triplet_rank = safe_list_get(rank_list, triplet[0], nb_triplets)
         sum_ranks += triplet_rank + 1.
         sum_inverse_ranks += 1./(triplet_rank + 1.)
         for valid_rank in range(triplet_rank):
             nonhits_at_n[valid_rank] += 1.
 
-    nb_triplets = len(triplets)
     mean_rank = sum_ranks/nb_triplets
     mean_reciprocal_ranks = sum_inverse_ranks/nb_triplets
     hits_at_n = [
