@@ -628,7 +628,9 @@ class TestSubgraphSampling:
     @staticmethod
     def test_random_walk_edge(graph, rng, n_iter, n_seeds, max_degree):
         """ Sanity checks on random walk over edges sampler """
-        sg = random_walk_edge_sample(graph, rng, n_iter, n_seeds=n_seeds, max_degree=max_degree)
+        sg = random_walk_edge_sample(
+            graph, rng, n_iter, n_seeds=n_seeds,
+            max_in_degree=max_degree, max_out_degree=max_degree)
         assert 0 <= len(sg.edges) <= n_iter + n_seeds
         # Assert we have at most n_seeds roots
         isRoot = lambda v: frozenset() <= sg.over(v) <= frozenset(v)
@@ -640,7 +642,7 @@ class TestSubgraphSampling:
         sg = random_walk_edge_sample(
             graph, rng, n_iter, n_seeds=n_seeds,
             use_opposite=True, use_both_ends=True,
-            max_degree=max_degree)
+            max_in_degree=max_degree, max_out_degree=max_degree)
         assert 0 <= len(sg.edges) <= n_iter + n_seeds
 
     @staticmethod
@@ -656,8 +658,9 @@ class TestSubgraphSampling:
         assert all(v in graph for v in sg)
 
     @staticmethod
-    def test_random_walk_edge_star_pattern(rng, n_iter, max_degree):
+    def test_random_walk_edge_star_pattern(rng, max_degree):
         """ Test subsampling of {1, k} -> 0 and then 0 -> {1, k} """
+        n_iter = max(100, max_degree * 100)
         if max_degree <= 0:
             max_degree = 10
         graph = DirectedGraph()
@@ -666,14 +669,12 @@ class TestSubgraphSampling:
 
         subgraph = random_walk_edge_sample(
             graph, rng, n_iter, n_seeds=1,
-            use_opposite=False, use_both_ends=False,
-            max_degree=max_degree)
+            use_opposite=False, use_both_ends=False)
         assert len(subgraph.edges) == 1  # only the seed
 
         subgraph = random_walk_edge_sample(
             graph, rng, n_iter, n_seeds=1,
-            use_opposite=False, use_both_ends=True,
-            max_degree=max_degree)
+            use_opposite=False, use_both_ends=True)
         assert len(subgraph.edges) == 1  # only the seed
 
         # Here we activate matching of edges *->0
@@ -681,7 +682,8 @@ class TestSubgraphSampling:
         subgraph = random_walk_edge_sample(
             graph, rng, n_iter, n_seeds=1,
             use_opposite=True, use_both_ends=False,
-            max_degree=max_degree)
+            max_out_degree=1,
+            max_in_degree=max_degree)
         assert len(subgraph.edges) == min(max_degree, n_iter)
 
     @staticmethod
@@ -704,7 +706,7 @@ class TestSubgraphSampling:
         subgraph = random_walk_edge_sample(
             graph, rng, n_iter, n_seeds=1,  # any starting point in the chain
             use_opposite=True, use_both_ends=True,
-            max_degree=1)
+            max_in_degree=1, max_out_degree=1)
         # Assert graph is a chain of expected length
         assert len(subgraph.edges) == chain_length
         assert(0 <= d <= 1 for _, d in subgraph.out_degree())
