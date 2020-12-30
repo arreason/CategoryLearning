@@ -691,10 +691,6 @@ def random_walk_vertex_sample(
     """
     if len(graph) == 0 or n_seeds == 0:
         return DiGraph()
-    if n_seeds * 2 < n_iter:
-        warning_str = (f'n_iter {n_iter} must be at least > 2 * n_seeds'
-            f' {2 * n_seeds} for consistent sampling results.')
-        warnings.warn(str_color('W', warning_str), UserWarning)
     if seeds is None:
         sampled_vertices = list(rng.choices(list(graph), k=n_seeds))
     else:
@@ -708,10 +704,7 @@ def random_walk_vertex_sample(
         if connected_vertices:
             sampled_vertices.append(rng.choice(connected_vertices))
     sampled_subg = graph.subgraph(sampled_vertices)
-    # Heuristic: subgraph edges must be at x2 n_seeds; if not, double n_iter and repeat
-    if len(sampled_subg.edges) >= n_seeds or n_iter > 10**6:
-        return sampled_subg
-    return random_walk_vertex_sample(graph, rng, n_iter * 2, seeds, n_seeds, use_opposite)
+    return sampled_subg
 
 
 def random_walk_edge_sample(
@@ -782,13 +775,20 @@ def random_walk_edge_sample(
 def n_hop_sample(
         graph: 'DiGraph[NodeType]',
         n_hops: int,
-        seeds: Optional[Iterable[ArrowType]] = None,
+        seeds = None,
         n_seeds: int = 1,
-        rng: Optional[random.Random] = None) -> 'DiGraph[NodeType]':
+        rng: random.Random = random.Random(),
+        search_branching: int = 2,
+        max_degree_greedy: int = -1
+        ) -> 'DiGraph[NodeType]':
     """
     N-hop sampling from random or specified locations.
+    Samples the nodes that form a subgraph from the original
+    graph, with all edges among them.
     Only samples in straight edge direction.
-    No control over length of returned graph
+    Two heuristics to control the size of returned sub-graph:
+    Search branching and max out degree for a node in sampled subgraph.
+    It's recommended to use inverse-completed graph.
 
     Params:
     - graph: the input graph
@@ -796,23 +796,46 @@ def n_hop_sample(
     - seeds: to root the walk on specific vertices
     - n_seeds: to start random walk on specified number of uniformly selected vertices
     - rng: random number generator to use, default to random.Random
+    - search_branching: max number of neighbor nodes to be sampled for each node at
+    a hop perimeter.
+    - max_degree_greedy: maximal out degree for a sampled node into already sampled
+    subgraph, at the given moment. It doesn't guarantee the maximal out degree in the final
+    graph since each edge may have an inverse. Subgraph contains all edges from
+    the original graph given a list of sampled nodes.
 
     Returns: a valid subgraph, where all edges existing between sampled vertices are kept
     """
     if len(graph) == 0 or n_hops <= 0:
         return DiGraph()
     if seeds is None:
-        if rng is None:
-            rng = random.Random()
-        sampled_vertices = set(rng.choices(list(graph), k=n_seeds))
+        to_visit = rng.choices(list(graph.nodes), k=n_seeds)
     else:
-        sampled_vertices = set(seeds)
-    for _ in range(1, n_hops):  # Seed sampling is considered 1st hop
-        visited_vertices = set()
-        for v in sampled_vertices:
-            visited_vertices.update(list(graph[v]))
-        sampled_vertices |= visited_vertices
-    return graph.subgraph(sampled_vertices)
+        to_visit = seeds
+    sampled = []
+    while True:
+        hop_neighbors = []
+        while to_visit:
+            node = to_visit.pop()
+            sampled.append(node)
+            neighbors_candidates = list(graph.neighbors(node))
+            node_neighbors = []
+            while neighbors_candidates and len(node_neighbors) < search_branching:
+                candidate = neighbors_candidates.pop(
+                    random.randint(0, len(neighbors_candidates)) - 1)
+                if candidate in sampled:
+                    continue
+                if max_degree_greedy < 0:
+                    node_neighbors.append(candidate)
+                elif graph.subgraph(
+                        sampled + node_neighbors + [candidate]
+                    ).out_degree(candidate) <= max_degree_greedy:
+                    node_neighbors.append(candidate)
+            sampled += node_neighbors
+            hop_neighbors += node_neighbors
+        n_hops -= 1
+        if not n_hops:
+            return graph.subgraph(sampled)
+        to_visit += hop_neighbors
 
 
 def clean_selfloops(
