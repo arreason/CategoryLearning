@@ -69,14 +69,19 @@ def compute_eval_triplet_ranks(
     cache: RelationCache[NodeType, ArrowType],
     triplets: List[TripletMatchPair],
     default_rank: int,
+    max_rank: Optional[int] = None,
 ) -> Mapping[ArrowHypothesisTriplet, int]:
     """
     Compute the rank of the true triplet in the list of ranked hypothesis
     generated from the partial triplet
+    - default_rank: The rank used if the triplet is not found
+    - max_rank: only ranks up to max_rank are computed.
+    Hence will default to default_rank above it
+    (if None all ranks are taken into account).
     """
     # compute ranks for each triplet
     rank_lists = {
-        triplet[0]: list(cache.sort_relations(*triplet[1]))
+        triplet[0]: list(cache.sort_relations(*triplet[1], n_items=max_rank))
         for triplet in triplets
     }
 
@@ -93,24 +98,30 @@ def compute_kge_metrics(
     cache: RelationCache[NodeType, ArrowType],
     triplets: List[TripletMatchPair],
     default_rank: int,
+    max_rank: Optional[int] = None,
 ) -> Mapping[str, Any]:
     """
-    Compute KGE metrics for a list of tuples containing:
-    - an evaluation triplet of the form (src, tar, label) with the actual values
-    - a request triplet of the form (src, tar, label) where any of
+    Compute KGE metrics for 
+    - a list of tuples containing:
+        - an evaluation triplet of the form (src, tar, label) with the actual values
+        - a request triplet of the form (src, tar, label) where any of
         the 3 values may be None, meaning we want to find a match for it
+    - default_rank: the default value of rank when the triplet is not found
+    - max_rank: only ranks up to max_rank are computed. Hence will default
+    to default_rank above it (if None all ranks are taken into account)
     """
     # compute ranks for each triplet
-    ranks = compute_eval_triplet_ranks(cache, triplets, default_rank)
+    ranks = compute_eval_triplet_ranks(
+        cache, triplets, default_rank, max_rank=max_rank)
     nb_triplets = len(triplets)
 
     mean_rank = sum(ranks.values())/nb_triplets
     mean_reciprocal_ranks = sum(
         1./(1. + value) for value in ranks.values())/nb_triplets
 
-    max_rank = max(value for value in ranks.values() if value < default_rank)
+    max_found = max(value for value in ranks.values() if value < default_rank)
     hits_at_n = sum((
-        Tsor([float(i >= value) for i in range(max_rank + 1)])
+        Tsor([float(i >= value) for i in range(max_found + 1)])
         for value in ranks.values()
     ))
 
@@ -127,11 +138,15 @@ def compute_average_missing_source_target_kge_metrics(
             Optional[NodeType], Optional[NodeType],
             Optional[FrozenSet[ArrowType]]]],
     default_rank: int,
+    max_rank: Optional[int] = None,
 ) -> Mapping[str, Any]:
     """
     Log KGE metrics for given triplets:
     remove source, then target and make prediction.
     Average results of both
+    - default_rank: the default value of rank when the triplet is not found
+    - max_rank: only ranks up to max_rank are computed. Hence will default
+    to default_rank above it (if None all ranks are taken into account)
     """
     sourceless_triplets = (
         (None, target, frozenset([label]))
@@ -147,22 +162,24 @@ def compute_average_missing_source_target_kge_metrics(
     ]
     source_kge_metrics = compute_kge_metrics(
         cache, list(zip(full_triplets, sourceless_triplets)), default_rank,
+        max_rank=max_rank
     )
     target_kge_metrics = compute_kge_metrics(
         cache, list(zip(full_triplets, targetless_triplets)), default_rank,
+        max_rank=max_rank
     )
 
     source_hits_at_n = source_kge_metrics['hits_at_n']
     target_hits_at_n = target_kge_metrics['hits_at_n']
 
     # force hits_at_n 1-d tensors of both dictionaries to have the same size
-    max_rank = max(len(source_hits_at_n), len(target_hits_at_n))
+    max_found = max(len(source_hits_at_n), len(target_hits_at_n))
     source_kge_metrics['hits_at_n'] = pad(
-        source_hits_at_n, (0, max_rank - len(source_hits_at_n)),
+        source_hits_at_n, (0, max_found - len(source_hits_at_n)),
         value=source_hits_at_n[-1]
     )
     target_kge_metrics['hits_at_n'] = pad(
-        target_hits_at_n, (0, max_rank - len(target_hits_at_n)),
+        target_hits_at_n, (0, max_found - len(target_hits_at_n)),
         value=target_hits_at_n[-1]
     )
 
