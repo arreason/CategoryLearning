@@ -7,13 +7,57 @@ Created on Wed May 30 20:53:39 2018
 
 various utilities for tensor manipulation
 """
-from typing import Optional, Sequence, Iterable, Tuple
+from typing import (
+    Optional, Sequence, Iterable, Tuple,
+    Any, Callable, List, TypeVar,
+)
+from heapq import nsmallest, nlargest
+
 import torch
 from torch import Tensor as Tsor
 from torch.nn.functional import kl_div
 
+
+_T = TypeVar('_T')
+
+
 # default precision of computations
 DEFAULT_EPSILON = 1e-6
+
+
+def sorted_nfirst(
+    iterable: Iterable[_T],
+    key: Optional[Callable[[_T], Any]] = None, reverse: bool = False,
+    n_items: Optional[int] = None,
+) -> List[_T]:
+    """
+    Sort the n_items first elements of the given iterable.
+    If n_items is None,
+    returns all elements of the iterable in order.
+    A custom key function can be supplied to customize the sort order,
+    and the reverse flag can be set to request the result in descending order.
+    """
+    if n_items is None:
+        return sorted(iterable, key=key, reverse=reverse)
+
+    sorter = nlargest if reverse else nsmallest
+    return sorter(n_items, iterable, key=key)
+
+
+def get_index_in_list(
+    this_list: List[_T], value: _T, start: int = 0, stop: Optional[int] = None,
+    default_index: Optional[int] = None,
+) -> Optional[int]:
+    """
+    Get index of value in this_list. If value is not in list, returns
+    default_index if it is given, or the length of the list.
+    """
+    list_length = len(this_list)
+    try:
+        index_stop = stop if stop else list_length
+        return this_list.index(value, start, index_stop)
+    except ValueError:
+        return default_index if default_index else list_length
 
 
 def repeat_tensor(

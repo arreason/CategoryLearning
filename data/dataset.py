@@ -6,8 +6,8 @@ from typing import Dict, Tuple, Generator
 import pickle
 import torch
 from data.config import (raw_dataset_pat, preproc_pat)
-from catlearn.utils import one_hot
-from catlearn.tensor_utils import Tsor
+from catlearn.utils.numerics import one_hot
+from catlearn.utils.numerics import Tsor
 import data.utils as data_utils
 
 class Dataset():

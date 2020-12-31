@@ -17,8 +17,10 @@ import pickle
 import numpy as np
 import networkx as nx
 from networkx import DiGraph, NetworkXError, pagerank, hits
-from catlearn.utils import (str_color, one_hot)
-from catlearn.utils import (init_logger, str_color)
+
+from catlearn.utils.numerics import one_hot
+from catlearn.utils.logging import str_color
+from catlearn.utils.logging import str_color
 
 
 NodeType = TypeVar("NodeType")

@@ -11,7 +11,7 @@ from functools import reduce
 from operator import mul
 import torch
 
-from catlearn.tensor_utils import (
+from catlearn.utils.numerics import (
     repeat_tensor, zeros_like, ones_like, DEFAULT_EPSILON)
 
 

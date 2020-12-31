@@ -1,7 +1,7 @@
 """Module with tools to cache relations"""
 from types import MappingProxyType
 from typing import (
-    Mapping, Callable, Iterable, Generic, Union, List,
+    Mapping, Callable, Iterable, Generic, Union,
     Tuple, Iterator, Hashable, Optional, FrozenSet, OrderedDict)
 from collections import abc, defaultdict
 from itertools import product
@@ -9,7 +9,9 @@ from math import inf
 
 import torch
 
-from catlearn.tensor_utils import Tsor, DEFAULT_EPSILON, subproba_kl_div
+from catlearn.utils.numerics import (
+    Tsor, DEFAULT_EPSILON, subproba_kl_div, sorted_nfirst,
+)
 from catlearn.graph_utils import DirectedGraph, NodeType
 from catlearn.composition_graph import (
     ArrowType, CompositeArrow, CompositionGraph)
@@ -498,7 +500,8 @@ class RelationCache(
     def sort_relations(
             self,
             src: Optional[NodeType] = None, tar: Optional[NodeType] = None,
-            labels: Optional[FrozenSet[ArrowType]] = None
+            labels: Optional[FrozenSet[ArrowType]] = None,
+            n_items: Optional[int] = None,
     ) -> OrderedDict[Tuple[NodeType, NodeType, FrozenSet[ArrowType]], float]:
         """
         Given a result graph from a match, sort available relations matching
@@ -508,6 +511,7 @@ class RelationCache(
         - if labels is given, will only look at the score corresponding to
         the sum for these labels. Otherwise will list all possible
         individual label scores.
+        If n_items is given, keeps only n_items first elements
         """
         arrows = self.arrows(src, tar, include_non_causal=False)
 
@@ -525,4 +529,7 @@ class RelationCache(
 
         return OrderedDict[
             Tuple[NodeType, NodeType, FrozenSet[ArrowType]], float,
-        ](sorted(options.items(), key=lambda item: item[1]))
+        ](sorted_nfirst(
+            options.items(), key=lambda item: item[1],
+            reverse=True, n_items=n_items,
+        ))

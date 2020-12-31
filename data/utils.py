@@ -6,12 +6,14 @@ import argparse
 import warnings
 import logging
 import sys
+
 import torch
 import numpy as np
 from tqdm import tqdm
 import word2vec
+
 from data.config import (raw_dataset_pat, preproc_pat)
-from catlearn.utils import (init_logger, str_color)
+from catlearn.utils.logging import (init_logger, str_color)
 
 
 init_logger()

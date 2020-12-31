@@ -12,7 +12,7 @@ from typing import Callable, Sequence, Tuple, Iterable, Union, IO
 import torch
 import torch.nn as nn
 
-from catlearn.tensor_utils import Tsor, AbstractModel
+from catlearn.utils.numerics import Tsor, AbstractModel
 
 
 class ConstantModel(nn.Module, AbstractModel):

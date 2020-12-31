@@ -12,7 +12,7 @@ from typing import IO, Iterable, Mapping, Tuple, Union, Optional
 import torch
 from torch.optim import Optimizer
 
-from catlearn.tensor_utils import (
+from catlearn.utils.numerics import (
     DEFAULT_EPSILON, Tsor, remap_subproba, AbstractModel)
 from catlearn.graph_utils import DirectedGraph, NodeType
 from catlearn.composition_graph import CompositeArrow, ArrowType
