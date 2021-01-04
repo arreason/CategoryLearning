@@ -18,7 +18,6 @@ import numpy as np
 import networkx as nx
 from networkx import DiGraph, NetworkXError, pagerank, hits
 from catlearn.utils import (str_color, one_hot)
-from catlearn.utils import (init_logger, str_color)
 
 
 NodeType = TypeVar("NodeType")
@@ -646,7 +645,7 @@ def sample(
         sampled_vertices = set(rng.choices(vertices, weights, k=int(sample_vertices_size)))
     else:
         sampled_vertices = rng.choices(vertices, weights, k=int(sample_vertices_size))
-        sampled_vertices = set([v for tpl in sampled_vertices for v in tpl])
+        sampled_vertices = {v for tpl in sampled_vertices for v in tpl}
 
     return graph.subgraph(sampled_vertices)
 
@@ -714,11 +713,12 @@ def random_walk_edge_sample(
         seeds: Optional[Iterable[ArrowType]] = None,
         n_seeds: int = 1,
         use_opposite: bool = False,
-        use_both_ends: bool = False) -> DirectedGraph[NodeType]:
+        use_both_ends: bool = False,
+        max_in_degree: int = 0,
+        max_out_degree: int = 0) -> DirectedGraph[NodeType]:
     """
     Random Walk graph edge subsampling
-    NOTE: for large n_seeds equivalent for breath-first graph traversal
-    with maximal depth of 1 and maximal degree of connection 3.
+
     NOTE: maximal degree of connection is not equivalent to graph diameter,
     but can be assumed as diameter for simplicity.
 
@@ -730,8 +730,16 @@ def random_walk_edge_sample(
     - n_seeds: to start random walk on specified number of uniformly selected vertices
     - use_opposite: if True, randomly walk either direct or dual graph fairly
     - use_both_ends: if True, randomly select either end of sampled edges for growing the walk
+    - max_in_degree: If strictly positive, the maximum allowed in-degree of the subgraph.
+                     Otherwise unlimited
+    - max_out_degree: If strictly positive, the maximum allowed out-degree of the subgraph.
+                     Otherwise unlimited
 
     Returns: a valid subgraph
+
+    Note: if the seeds do not repsect the degree constraints, they will be kept exactly has_edge
+          passed. Sampling will enforce the constraints when adding edges, but the resulting
+          subgraph will not have the expected capped degree.
 
     Given an edge 1->2 in the graph 0->1->2->3 + 1->4 + 5->2:
     * use_opposite=False, use_both_ends=False:
@@ -743,12 +751,20 @@ def random_walk_edge_sample(
     * use_opposite=True, use_both_ends=True:
       -> candidates are 2->3, 5->2, 1->4 and 0->1
     """
+    def get_degree_safe(graph, node, use_in_degree):
+        degrees = graph.in_degree([node]) if use_in_degree else graph.out_degree([node])
+        return dict(degrees).get(node, 0)  # thank you networkx for the contrived degree usage...
+
+    def can_add_edge(graph, node, use_in_degree, allowed_degree):
+        return allowed_degree <= 0 or get_degree_safe(graph, node, use_in_degree) < allowed_degree
+
     if len(graph.edges) == 0:
         return DirectedGraph()
     if seeds is None:
         sampled_edges = list(rng.choices(list(graph.edges), k=n_seeds))
     else:
         sampled_edges = list(seeds)
+
     i = 0
     sampled_graph = DirectedGraph(sampled_edges)
     while i < n_iter:
@@ -758,17 +774,25 @@ def random_walk_edge_sample(
         use_src = use_both_ends and rng.randint(0, 1) # Flip a coin
         src = e[0] if use_src else e[1]
         gview = graph.op if use_op else graph
+
+        if not can_add_edge(sampled_graph, src, use_op,
+                            max_in_degree if use_op else max_out_degree):
+            continue
+
         compatible_edges = [
-            (dst, {}) for dst in gview[src] if not gview[src][dst]
-        ] + [
-            (dst, {k: v}) for dst in gview[src] for k,v in gview[src][dst].items()
+            (dst, gview[src][dst]) for dst in gview[src]
+            if (can_add_edge(sampled_graph, dst, not use_op,
+                             max_in_degree if not use_op else max_in_degree) # degree constaint
+                and (src, dst) not in sampled_graph.edges) # don't re-sample a known edge
         ]
+
         if compatible_edges:
             dst, labels = rng.choice(compatible_edges)
             if use_op:
-                sampled_graph[dst] = {src: labels}
-            else:
-                sampled_graph[src] = {dst: labels}
+                src, dst = dst, src
+            sampled_edges.append((src, dst))
+            sampled_graph.add_edge(src, dst)
+            sampled_graph[src][dst].update(labels)
     return sampled_graph
 
 
@@ -862,7 +886,6 @@ def clean_isolates(
     """Clean nodes with zero connections (either in- or outbound)."""
     isolates = list(nx.isolates(graph))
     print(f'Following {len(isolates)} isolate(s) are found:\n{isolates}')
-    graph.remove_nodes_from(list(nx.isolates(graph)))
     if clean:
         graph.remove_nodes_from(isolates)
         print(f'{len(isolates)} isolates are removed.')
