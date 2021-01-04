@@ -6,7 +6,7 @@
 Tests for the categorical_model file.
 """
 from typing import (
-    Any, Dict, Mapping, Iterable, List, Tuplen, Callable, Optional)
+    Any, Dict, Mapping, Iterable, List, Tuple, Callable, Optional)
 from functools import reduce
 from itertools import combinations, product, chain
 from tempfile import NamedTemporaryFile
@@ -20,7 +20,7 @@ import pytest
 #pylint: disable=unused-import
 from tests.test_tools import pytest_generate_tests
 
-from catlearn.tensor_utils import one_hot, subproba_kl_div, Tsor
+from catlearn.utils.numerics import one_hot, subproba_kl_div, Tsor
 from catlearn.graph_utils import DirectedGraph
 from catlearn.composition_graph import CompositeArrow
 from catlearn.relation_cache import RelationCache, NegativeMatch
@@ -363,32 +363,32 @@ class TestRelationCache:
                         (matches[src][tar][expected_label][1] - expected_cost)
                         <= TEST_EPSILON)
 
-    @staticmethod
-    def test_sort_relations(
-            label_universe: Mapping[int, Tsor],
-            order: List[Tuple[int, int, int]],
-    ) -> None:
-        """
-        test relation sorting
-        """
-        def relation(_: Tsor, __: Tsor, label: Tsor) -> Tsor:
-            return label
+    # @staticmethod
+    # def test_sort_relations(
+    #         label_universe: Mapping[int, Tsor],
+    #         order: List[Tuple[int, int, int]],
+    # ) -> None:
+    #     """
+    #     test relation sorting
+    #     """
+    #     def relation(_: Tsor, __: Tsor, label: Tsor) -> Tsor:
+    #         return label
 
-        def scoring(src: Tsor, dst: Tsor, rel: Tsor):
-            return (1./nb_labels) * 1./torch.tensor(
-                order.index((src, dst, rel) + 1 for rel in ))
-        scores_algebra = VectMultAlgebra(1)
+    #     def scoring(src: Tsor, dst: Tsor, rel: Tsor):
+    #         return (1./nb_labels) * 1./torch.tensor(
+    #             order.index((src, dst, rel) + 1 for rel in ))
+    #     scores_algebra = VectMultAlgebra(1)
 
-        datas = {
-            i: torch.full((1,), i, dtype=torch.float) for i in range(3)}
+    #     datas = {
+    #         i: torch.full((1,), i, dtype=torch.float) for i in range(3)}
 
-        cache = TestRelationCache.get_cache(
-            relation, label_universe,
-            scoring, scores_algebra, 1, datas,
-            arrow,
-        )
+    #     cache = TestRelationCache.get_cache(
+    #         relation, label_universe,
+    #         scoring, scores_algebra, 1, datas,
+    #         arrow,
+    #     )
 
-        assert False
+    #     assert False
 
     @staticmethod
     def test_prune(
