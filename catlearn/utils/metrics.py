@@ -64,6 +64,7 @@ def compute_training_metrics(
         'arrow_numbers': arrows,
 }
 
+from tqdm import tqdm
 
 def compute_eval_triplet_ranks(
     cache: RelationCache[NodeType, ArrowType],
@@ -86,7 +87,7 @@ def compute_eval_triplet_ranks(
     }
 
     ranks = {}
-    for triplet, rank_list in rank_lists.items():
+    for triplet, rank_list in tqdm(rank_lists.items()):
         triplet_rank = get_index_in_list(
             rank_list, triplet, default_index=default_rank,
         )
