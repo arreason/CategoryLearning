@@ -118,8 +118,7 @@ def compute_kge_metrics(
     mean_rank = sum(ranks.values())/nb_triplets
     mean_reciprocal_ranks = sum(
         1./(1. + value) for value in ranks.values())/nb_triplets
-
-    max_found = max(value for value in ranks.values() if value < default_rank)
+    max_found = max((value for value in ranks.values() if value < default_rank), default=default_rank)
     hits_at_n = sum((
         Tsor([float(i >= value) for i in range(max_found + 1)])
         for value in ranks.values()
