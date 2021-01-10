@@ -82,7 +82,7 @@ class DirectedGraph(Generic[NodeType], DiGraph, abc.MutableMapping):  # pylint: 
             for (src, tar, labels) in self.edges(data=True)))
 
     @property
-    def op(self) -> DirectedGraph[NodeType]:
+    def op(self) -> 'DirectedGraph[NodeType]':
         """
         returns the opposite graph
         """
@@ -565,7 +565,7 @@ def generate_random_graph(
 def sample_vertices(
         graph: DirectedGraph[NodeType],
         sample_vertices_size: int,
-        ranking: Callable[Iterable[NodeType], Mapping[NodeType, float]],
+        ranking: Callable[[Iterable[NodeType]], Mapping[NodeType, float]],
         rng: random.Random) -> DirectedGraph[NodeType]:
     """
     Sample a random subgraph of `graph` with respect to a probability
@@ -595,10 +595,10 @@ def sample_edges(
         graph: DirectedGraph[NodeType],
         sample_edges_size: int,
         ranking: Callable[
-            Union[
+            [Union[
                 Iterable[Tuple[NodeType, NodeType]],
                 Iterable[Tuple[NodeType, NodeType, Any]],
-            ],
+            ]],
             Mapping[Tuple[NodeType, NodeType, Any, Any], float]],
         rng: random.Random,
         with_labels: bool = False,
