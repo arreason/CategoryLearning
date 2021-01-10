@@ -1,8 +1,7 @@
 import os
 from typing import Any, Tuple, Optional, FrozenSet, List, Mapping
 from collections import defaultdict
-from itertools import chain, zip_longest
-import math
+from itertools import chain
 
 from torch.nn.functional import pad
 
@@ -11,7 +10,6 @@ from ..composition_graph import (
     NodeType, ArrowType, DirectedGraph,
 )
 from ..relation_cache import RelationCache
-from ..categorical_model import TrainableDecisionCatModel
 
 
 ArrowHypothesisTriplet = Tuple[NodeType, NodeType, FrozenSet[ArrowType]]
