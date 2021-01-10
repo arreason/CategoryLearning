@@ -1,7 +1,7 @@
 """Module with tools to cache relations"""
 from types import MappingProxyType
 from typing import (
-    Mapping, Callable, Iterable, Generic, Union,
+    Mapping, Callable, Iterable, Generic, Union, List,
     Tuple, Iterator, Hashable, Optional, FrozenSet, OrderedDict)
 from collections import abc, defaultdict
 from itertools import product
@@ -502,7 +502,7 @@ class RelationCache(
             src: Optional[NodeType] = None, tar: Optional[NodeType] = None,
             labels: Optional[FrozenSet[ArrowType]] = None,
             n_items: Optional[int] = None,
-    ) -> OrderedDict[Tuple[NodeType, NodeType, FrozenSet[ArrowType]], float]:
+    ) -> List[Tuple[NodeType, NodeType, FrozenSet[ArrowType]]]:
         """
         Given a result graph from a match, sort available relations matching
         the specific properties (in terms of score):
@@ -516,20 +516,19 @@ class RelationCache(
         arrows = self.arrows(src, tar, include_non_causal=False)
 
         if labels is None:
-            options = {
-                (arr[0], arr[-1], frozenset((label,))): float(kl_match(
-                    self[arr], self.label_universe[label]))
-                for (arr, label) in product(arrows, self.label_universe)}
+            options = (
+                ((arr[0], arr[-1], frozenset((label,))), float(kl_match(
+                    self[arr], self.label_universe[label])))
+                for (arr, label) in product(arrows, self.label_universe))
         else:
-            options = {
-                (arr[0], arr[-1], frozenset(labels)): float(sum(
-                    kl_match(self[arr], self.label_universe[label])
+            options = (
+                ((arr[0], arr[-1], frozenset(labels)), float(sum(
+                    kl_match(self[arr], self.label_universe[label]))
                     for label in labels))
-                for arr in arrows}
+                for arr in arrows)
 
-        return OrderedDict[
-            Tuple[NodeType, NodeType, FrozenSet[ArrowType]], float,
-        ](sorted_nfirst(
-            options.items(), key=lambda item: item[1],
+        n_first = sorted_nfirst(
+            options, key=lambda item: item[1],
             reverse=True, n_items=n_items,
-        ))
+        )
+        return [hyp for (hyp, score) in n_first]

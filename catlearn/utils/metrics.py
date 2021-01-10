@@ -4,13 +4,11 @@ from collections import defaultdict
 from itertools import chain, zip_longest
 import math
 
-import wandb
-import torch
 from torch.nn.functional import pad
 
 from .numerics import Tsor, get_index_in_list
 from ..composition_graph import (
-    NodeType, ArrowType, DirectedGraph, CompositeArrow,
+    NodeType, ArrowType, DirectedGraph,
 )
 from ..relation_cache import RelationCache
 from ..categorical_model import TrainableDecisionCatModel
@@ -82,7 +80,7 @@ def compute_eval_triplet_ranks(
     """
     # compute ranks for each triplet
     rank_lists = {
-        triplet[0]: list(cache.sort_relations(*triplet[1], n_items=max_rank))
+        triplet[0]: cache.sort_relations(*triplet[1], n_items=max_rank)
         for triplet in triplets
     }
 
