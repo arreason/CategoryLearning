@@ -390,11 +390,11 @@ class RelationCache(
 
             added_arrows = set()
             # loop through length n arrows and try to extend them by 1 node
-            for arr in self.arrows(
+            for arr in set(self.arrows(
                 arrow_length_range=(order, order + 1), include_non_causal=False,
-            ):
-                for extension in self.arrows(
-                    src=arr[-1], arrow_length_range=(1, 2)):
+            )):
+                for extension in set(self.arrows(
+                    src=arr[-1], arrow_length_range=(1, 2))):
                     arr_candidate = arr + extension
 
                     # verify that candidate arrow's end is causal
