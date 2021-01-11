@@ -523,8 +523,8 @@ class RelationCache(
         else:
             options = (
                 ((arr[0], arr[-1], frozenset(labels)), float(sum(
-                    kl_match(self[arr], self.label_universe[label]))
-                    for label in labels))
+                    kl_match(self[arr], self.label_universe[label])
+                    for label in labels)))
                 for arr in arrows)
 
         n_first = sorted_nfirst(

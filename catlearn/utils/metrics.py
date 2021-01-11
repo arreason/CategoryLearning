@@ -4,6 +4,7 @@ from collections import defaultdict
 from itertools import chain
 
 from torch.nn.functional import pad
+from tqdm import tqdm
 
 from .numerics import Tsor, get_index_in_list
 from ..composition_graph import (
@@ -60,7 +61,6 @@ def compute_training_metrics(
         'arrow_numbers': arrows,
 }
 
-from tqdm import tqdm
 
 def compute_eval_triplet_ranks(
     cache: RelationCache[NodeType, ArrowType],
