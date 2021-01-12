@@ -1,4 +1,6 @@
 # Strictly required
+# before installation run 'pip install --upgrade pip' command
+# otherwise installation errors would occur
 numpy
 scipy>=1.1.0
 pytest
