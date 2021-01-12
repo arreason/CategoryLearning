@@ -27,7 +27,8 @@ DEFAULT_EPSILON = 1e-6
 
 def sorted_nfirst(
     iterable: Iterable[_T],
-    key: Optional[Callable[[_T], Any]] = None, reverse: bool = False,
+    key: Optional[Callable[[_T], Any]] = None,
+    reverse: bool = False,
     n_items: Optional[int] = None,
 ) -> List[_T]:
     """
@@ -47,7 +48,7 @@ def sorted_nfirst(
 def get_index_in_list(
     this_list: List[_T], value: _T, start: int = 0, stop: Optional[int] = None,
     default_index: Optional[int] = None,
-) -> Optional[int]:
+) -> int:
     """
     Get index of value in this_list. If value is not in list, returns
     default_index if it is given, or the length of the list.
