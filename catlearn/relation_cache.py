@@ -388,23 +388,25 @@ class RelationCache(
         order = 1
         while True:
 
-            added_arrows = set()
+            arrows_to_add = set()
             # loop through length n arrows and try to extend them by 1 node
-            for arr in set(self.arrows(
+            for arr in self.arrows(
                 arrow_length_range=(order, order + 1), include_non_causal=False,
-            )):
-                for extension in set(self.arrows(
-                    src=arr[-1], arrow_length_range=(1, 2))):
+            ):
+                for extension in self.arrows(
+                    src=arr[-1], arrow_length_range=(1, 2)):
                     arr_candidate = arr + extension
 
                     # verify that candidate arrow's end is causal
                     if (arr_candidate not in self and self.get(
                             arr_candidate[1:],
                             default=torch.zeros(0)).sum() > 0):
-                        self.add(arr_candidate)
-                        added_arrows.add(arr_candidate)
+                        arrows_to_add.add(arr_candidate)
 
-            # drop arrows above the limit
+
+            # add arrows, then drop arrows above the limit number of arrows
+            for arr in arrows_to_add:
+                self.add(arr)
             removed_arrows = self.prune_relations(max_arrow_number)
 
             # if we've not looked at all arrows already in the cache
@@ -412,7 +414,7 @@ class RelationCache(
             # otherwise stop as soon as nothing new comes up
             if not (order <= max_order_before_update or any(
                     self[arr].sum() > 0
-                    for arr in added_arrows - removed_arrows)):
+                    for arr in arrows_to_add - removed_arrows)):
                 break
 
             order += 1
